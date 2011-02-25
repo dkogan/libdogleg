@@ -1,6 +1,9 @@
 #include <splm.h>
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
+#include <string.h>
+#include <malloc.h>
 #include "optimization_sparselm.h"
 
 // this is the solver using the sparse Levenberg-Marquardt implementation from
@@ -15,33 +18,66 @@ typedef struct
 {
   optimizationFunction_splm_t* callback;
   void*                        cookie;
+
+  // I have separate measurement and jacobian callbacks, often called with the same arguments. Since
+  // it's easiest for me to compute the jacobian and the measurements together, I cache each
+  // computation in case of an identical successive call
+  double*           p_cached;
+  double*           x_cached;
+  struct splm_crsm  J_cached;
 } solver_cookie_t;
 
 static void callback_measurement(double *p, double *hx, int nvars, int nobs, void* _solver_cookie)
 {
-  // These do nothing, but prevent the compiler from warning me about these unused variables
-  (void)nvars;
-  (void)nobs;
-
   /* functional relation describing measurements. Given a parameter vector p,
    * computes a prediction of the measurements \hat{x}. p is nvarsx1,
    * \hat{x} is nobsx1, maximum
    */
   solver_cookie_t* solver_cookie = (solver_cookie_t*)_solver_cookie;
-  (*solver_cookie->callback)( p, hx, NULL, solver_cookie->cookie );
+  assert(nvars == solver_cookie->J_cached.nc &&
+         nobs  == solver_cookie->J_cached.nr);
+
+  if( memcmp(p, solver_cookie->p_cached, nvars*sizeof(double)) != 0)
+  {
+    // I haven't yet evaluated this, so cache the input and callback()
+    memcpy(solver_cookie->p_cached, p,  nvars*sizeof(double));
+
+    (*solver_cookie->callback)(  solver_cookie->p_cached,
+                                 solver_cookie->x_cached,
+                                &solver_cookie->J_cached,
+                                 solver_cookie->cookie );
+  }
+
+  memcpy(hx, solver_cookie->x_cached, solver_cookie->J_cached.nr *sizeof(double));
 }
 
 static void callback_jacobian(double *p, struct splm_crsm* jac, int nvars, int nobs, void* _solver_cookie)
 {
-  jac->nr = nobs;
-  jac->nc = nvars;
-
   /* function to supply the nonzero pattern of the sparse Jacobian of func and
    * evaluate it at p in CRS format. Non-zero elements are to be stored in jac
    * which has been preallocated with a capacity of Jnnz
    */
   solver_cookie_t* solver_cookie = (solver_cookie_t*)_solver_cookie;
-  (*solver_cookie->callback)( p, NULL, jac, solver_cookie->cookie );
+  assert(nvars == solver_cookie->J_cached.nc &&
+         nobs  == solver_cookie->J_cached.nr);
+
+  if( memcmp(p, solver_cookie->p_cached, nvars*sizeof(double)) != 0)
+  {
+    // I haven't yet evaluated this, so cache the input and callback()
+    memcpy(solver_cookie->p_cached, p,  nvars*sizeof(double));
+
+    (*solver_cookie->callback)(  solver_cookie->p_cached,
+                                 solver_cookie->x_cached,
+                                &solver_cookie->J_cached,
+                                 solver_cookie->cookie );
+  }
+
+  memcpy(jac->val,    solver_cookie->J_cached.val,     solver_cookie->J_cached.nnz     * sizeof(double));
+  memcpy(jac->colidx, solver_cookie->J_cached.colidx,  solver_cookie->J_cached.nnz     * sizeof(int));
+  memcpy(jac->rowptr, solver_cookie->J_cached.rowptr, (solver_cookie->J_cached.nr + 1) * sizeof(int));
+  jac->nr  = solver_cookie->J_cached.nr;
+  jac->nc  = solver_cookie->J_cached.nc;
+  jac->nnz = solver_cookie->J_cached.nnz;
 }
 
 double optimize_sparseLM(double* p, int n,
@@ -74,11 +110,26 @@ double optimize_sparseLM(double* p, int n,
   solver_cookie_t solver_cookie = {.callback = f,
                                    .cookie   = cookie};
 
+  assert( solver_cookie.x_cached        = malloc( numMeasurements *            sizeof(double)) );
+  assert( solver_cookie.p_cached        = malloc( n *                          sizeof(double)) );
+  assert( solver_cookie.J_cached.val    = malloc( numNonzeroJacobianElements * sizeof(double)) );
+  assert( solver_cookie.J_cached.colidx = malloc( numNonzeroJacobianElements * sizeof(int))    );
+  assert( solver_cookie.J_cached.rowptr = malloc( (numMeasurements + 1) *      sizeof(int))    );
+  solver_cookie.J_cached.nr  = numMeasurements;
+  solver_cookie.J_cached.nc  = n;
+  solver_cookie.J_cached.nnz = numNonzeroJacobianElements;
+
   int iterations = sparselm_dercrs(&callback_measurement, &callback_jacobian,
                                    p, NULL, n, 0, numMeasurements,
                                    numNonzeroJacobianElements, -1,
                                    MAX_ITERATIONS, NULL, info,
                                    &solver_cookie);
+
+  free( solver_cookie.x_cached        );
+  free( solver_cookie.p_cached        );
+  free( solver_cookie.J_cached.val    );
+  free( solver_cookie.J_cached.colidx );
+  free( solver_cookie.J_cached.rowptr );
 
   if( iterations > 0 )
   {
