@@ -31,7 +31,7 @@ static void callback_cost(double *p, double *hx, int nvars, int nobs, void* _sol
   (*solver_cookie->callback)( p, hx, NULL, solver_cookie->cookie );
 }
 
-static void callback_constraint(double *p, struct splm_crsm* jac, int nvars, int nobs, void* _solver_cookie)
+static void callback_jacobian(double *p, struct splm_crsm* jac, int nvars, int nobs, void* _solver_cookie)
 {
   jac->nr = nobs;
   jac->nc = nvars;
@@ -74,7 +74,7 @@ double optimize_sparseLM(double* p, int n,
   solver_cookie_t solver_cookie = {.callback = f,
                                    .cookie   = cookie};
 
-  int iterations = sparselm_dercrs(&callback_cost, &callback_constraint,
+  int iterations = sparselm_dercrs(&callback_cost, &callback_jacobian,
                                    p, NULL, n, 0, numMeasurements,
                                    numNonzeroJacobianElements, -1,
                                    MAX_ITERATIONS, NULL, info,
