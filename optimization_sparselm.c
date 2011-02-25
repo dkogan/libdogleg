@@ -17,7 +17,7 @@ typedef struct
   void*                        cookie;
 } solver_cookie_t;
 
-static void callback_cost(double *p, double *hx, int nvars, int nobs, void* _solver_cookie)
+static void callback_measurement(double *p, double *hx, int nvars, int nobs, void* _solver_cookie)
 {
   // These do nothing, but prevent the compiler from warning me about these unused variables
   (void)nvars;
@@ -74,7 +74,7 @@ double optimize_sparseLM(double* p, int n,
   solver_cookie_t solver_cookie = {.callback = f,
                                    .cookie   = cookie};
 
-  int iterations = sparselm_dercrs(&callback_cost, &callback_jacobian,
+  int iterations = sparselm_dercrs(&callback_measurement, &callback_jacobian,
                                    p, NULL, n, 0, numMeasurements,
                                    numNonzeroJacobianElements, -1,
                                    MAX_ITERATIONS, NULL, info,
