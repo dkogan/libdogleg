@@ -27,6 +27,19 @@ typedef struct
   struct splm_crsm  J_cached;
 } solver_cookie_t;
 
+static int haveCachedResult(const double* p, int nvars, const solver_cookie_t* solver_cookie)
+{
+  static int first = 1;
+  if(first)
+  {
+    // first time we're called, there IS no cached result
+    first = 0;
+    return 0;
+  }
+
+  return memcmp(p, solver_cookie->p_cached, nvars*sizeof(double));
+}
+
 static void callback_measurement(double *p, double *hx, int nvars, int nobs, void* _solver_cookie)
 {
   /* functional relation describing measurements. Given a parameter vector p,
@@ -37,7 +50,7 @@ static void callback_measurement(double *p, double *hx, int nvars, int nobs, voi
   assert(nvars == solver_cookie->J_cached.nc &&
          nobs  == solver_cookie->J_cached.nr);
 
-  if( memcmp(p, solver_cookie->p_cached, nvars*sizeof(double)) != 0)
+  if( !haveCachedResult(p, nvars, solver_cookie) )
   {
     // I haven't yet evaluated this, so cache the input and callback()
     memcpy(solver_cookie->p_cached, p,  nvars*sizeof(double));
@@ -61,7 +74,7 @@ static void callback_jacobian(double *p, struct splm_crsm* jac, int nvars, int n
   assert(nvars == solver_cookie->J_cached.nc &&
          nobs  == solver_cookie->J_cached.nr);
 
-  if( memcmp(p, solver_cookie->p_cached, nvars*sizeof(double)) != 0)
+  if( !haveCachedResult(p, nvars, solver_cookie) )
   {
     // I haven't yet evaluated this, so cache the input and callback()
     memcpy(solver_cookie->p_cached, p,  nvars*sizeof(double));
