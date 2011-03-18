@@ -153,3 +153,67 @@ double optimize_sparseLM(double* p, int n,
   fprintf(stderr, "solver failed. error: %d\n", iterations);
   return -1.0;
 }
+
+
+static double getGrad(int var, int meas, const struct splm_crsm* J)
+{
+  int row     = J->rowptr[meas    ];
+  int rownext = J->rowptr[meas + 1];
+
+  for(int i=row; i<rownext; i++)
+  {
+    if(J->colidx[i] == var)
+      return J->val[i];
+  }
+
+  return nan("nogradient");
+}
+
+void testGradient(int var, const double* p0, void* cookie, int Nstate, int Nmeas, int Jnnz, optimizationFunction_splm_t* callback)
+{
+  const double delta = 1e-6;
+
+  double           x0[Nmeas];
+  double           x [Nmeas];
+
+  double           p [Nstate];
+  memcpy(p, p0, Nstate * sizeof(double));
+
+
+  struct splm_crsm J0;
+  struct splm_crsm J ;
+  J0.val    = malloc( Jnnz      * sizeof(double) );
+  J .val    = malloc( Jnnz      * sizeof(double) );
+  J0.colidx = malloc( Jnnz      * sizeof(int) );
+  J .colidx = malloc( Jnnz      * sizeof(int) );
+  J0.rowptr = malloc( (Nmeas+1) * sizeof(int) );
+  J .rowptr = malloc( (Nmeas+1) * sizeof(int) );
+
+  (*callback)(p, x0, &J0, cookie);
+  p[var] += delta;
+  (*callback)(p, x,  &J,  cookie);
+
+  for(int i=0; i<Nmeas; i++)
+  {
+    double gObs = (x[i] - x0[i]) / delta;
+    double gRep = getGrad(var, i, &J0);
+
+    if(isnan(gRep))
+    {
+      if( gObs != 0 )
+        printf("var,meas %d,%d: no reported gradient, but observed %f\n", var, i, gObs);
+
+      continue;
+    }
+
+    printf("var,meas %d,%d: reported: %f, observed: %f, err: %f, relativeerr: %f\n", var, i,
+           gRep, gObs, fabs(gRep - gObs), fabs(gRep - gObs) / ( (fabs(gRep) + fabs(gObs)) / 2.0 ) );
+  }
+
+  free( J0.val    );
+  free( J .val    );
+  free( J0.colidx );
+  free( J .colidx );
+  free( J0.rowptr );
+  free( J .rowptr );
+}
