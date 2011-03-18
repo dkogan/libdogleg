@@ -37,7 +37,7 @@ static int haveCachedResult(const double* p, int nvars, const solver_cookie_t* s
     return 0;
   }
 
-  return memcmp(p, solver_cookie->p_cached, nvars*sizeof(double));
+  return memcmp(p, solver_cookie->p_cached, nvars*sizeof(double)) == 0;
 }
 
 static void callback_measurement(double *p, double *hx, int nvars, int nobs, void* _solver_cookie)
