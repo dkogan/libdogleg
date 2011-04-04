@@ -12,7 +12,7 @@
 // This implementation is licensed under the GPL, so we cannot use it in a commercial product
 // without opening all code linked to it
 
-#define MAX_ITERATIONS 1000
+#define MAX_ITERATIONS 10000
 
 typedef struct
 {
