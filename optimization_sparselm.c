@@ -147,7 +147,7 @@ double optimize_sparseLM(double* p, int n,
   if( iterations > 0 )
   {
     fprintf(stderr, "success! took %d iterations\n", iterations);
-    return sqrt(info[1] / ((double)numMeasurements / 2.0));
+    return info[1];
   }
 
   fprintf(stderr, "solver failed. error: %d\n", iterations);
