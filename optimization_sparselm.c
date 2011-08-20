@@ -9,9 +9,8 @@
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
 #define MAX_ITERATIONS         100
-#define LAMBDA_DECREASE_FACTOR 0.8
-#define LAMBDA_INCREASE_FACTOR 5
-
+#define LAMBDA_DECREASE_FACTOR 0.1
+#define LAMBDA_INCREASE_FACTOR 2
 
 // used to consolidate the casts
 #define P(A, index) ((unsigned int*)((A)->p))[index]
