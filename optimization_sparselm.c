@@ -101,6 +101,7 @@ typedef struct
 {
   double*         p;
   double*         x;
+  double          norm2_x;
   cholmod_sparse* Jt;
   cholmod_sparse* JtJ;
   cholmod_sparse* Jt_x;
@@ -125,6 +126,11 @@ typedef struct
 static void computeCallbackOperatingPoint(operatingPoint_t* point, solverContext_t* ctx)
 {
   (*ctx->f)(point->p, point->x, point->Jt, ctx->cookie);
+
+  // compute the 2-norm of the current error vector
+  point->norm2_x = 0;
+  for(unsigned int i=0; i<point->Jt->ncol; i++)
+    point->norm2_x += point->x[i]*point->x[i];
 
   // compute Jt*x. I do this myself because the MatrixOps module in CHOLMOD is licensed under the
   // GPL
@@ -193,6 +199,14 @@ static int evaluateStep_adjustLambda(const operatingPoint_t* before,
                                      const operatingPoint_t* after,
                                      double* lambda)
 {
+  if(after->norm2_x >= before->norm2_x)
+  {
+    // error increased. Reject this step and favor gradient descent
+    *lambda *= LAMBDA_INCREASE_FACTOR;
+    return 0;
+  }
+
+  *lambda *= LAMBDA_DECREASE_FACTOR;
   return 1;
 }
  
