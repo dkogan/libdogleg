@@ -216,8 +216,8 @@ static void runOptimizer(solverContext_t* ctx)
         // pointers are still around and I don't have to re-allocate
         operatingPoint_t* tmp;
         tmp             = ctx->afterStep;
-        ctx->beforeStep = ctx->afterStep;
-        ctx->afterStep  = tmp;
+        ctx->afterStep  = ctx->beforeStep;
+        ctx->beforeStep = tmp;
 
         break;
       }
