@@ -12,6 +12,15 @@
 #define LAMBDA_DECREASE_FACTOR 0.1
 #define LAMBDA_INCREASE_FACTOR 2
 
+// All papers I've seen say that I should invert JtJ + lambda*I. Wikipedia
+// (Levenberg-Marquardt article) says that inverting JtJ + lambda*diag(JtJ) is
+// better, but I can't find any justification for this. Wikipedia claims the
+// justification appears in Marquardt's 1963 paper, but this paper actually
+// suggests a different method. If I use 'I' then I don't need to explicitly
+// compute JtJ at all, with CHOLMOD doing all that internally.
+#define DAMP_DIAG_JTJ
+
+
 // used to consolidate the casts
 #define P(A, index) ((unsigned int*)((A)->p))[index]
 #define I(A, index) ((unsigned int*)((A)->i))[index]
@@ -171,10 +180,30 @@ static void takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     ASSERT(ctx->factorization != NULL);
   }
 
+  // All papers I've seen say that I should invert JtJ + lambda*I. Wikipedia
+  // says that inverting JtJ + lambda*diag(JtJ) is better, but I can't find
+  // any justification for this. Wikipedia claims the justification appears in
+  // Marquardt's 1963 paper, but this paper actually suggests a different
+  // method. If I use 'I' then I don't need to explicitly compute JtJ at all,
+  // with CHOLMOD doing all that internally
+#ifdef DAMP_DIAG_JTJ
+  for(unsigned int i=0; i<pointFrom->JtJ->ncol; i++)
+  {
+    for(unsigned int j=P(pointFrom->JtJ, i); j<P(pointFrom->JtJ, i+1); j++)
+    {
+      if(I(pointFrom->JtJ, j) == i)
+      {
+        X(pointFrom->JtJ, j) *= (lambda + 1.0);
+      }
+    }
+  }
+  ASSERT( cholmod_factorize(pointFrom->JtJ, ctx->factorization, &ctx->common) );
+#else
   double beta[2] = {lambda, 0};
   ASSERT( cholmod_factorize_p(pointFrom->JtJ, beta,
                               NULL, 0,
                               ctx->factorization, &ctx->common) );
+#endif
 
   // solve JtJ delta = Jt x
   // new p is p - delta
