@@ -177,11 +177,11 @@ static void takeStepFrom(operatingPoint_t* pointFrom, double* newp,
                                            pointFrom->Jt_x,
                                            &ctx->common);
 
-  for(unsigned int i=0; i<pointFrom->Jt->nrow; i++)
+  ASSERT( result->ncol == 1 );  // make sure the resulting matrix has the right dimensions
+  for(unsigned int i=0; i<P(result, 1); i++)
   {
-    ASSERT( I(result, i) == i); // make sure the resulting matrix has the
-    // dimensions I think it should have
-    newp[i] = pointFrom->p[i] - X(result, i);
+    unsigned int row = I(result, i);
+    newp[row] = pointFrom->p[row] - X(result, i);
   }
 
   cholmod_free_sparse(&result, &ctx->common);
