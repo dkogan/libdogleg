@@ -1,12 +1,16 @@
 #pragma once
 
-typedef void (optimizationFunction_splm_t)(const double*     p,
-                                           double*           x,
-                                           struct splm_crsm* J,
-                                           void*             cookie);
+#include <cholmod.h>
 
-double optimize_sparseLM(double* p, int n,
-                         int numMeasurements, int numNonzeroJacobianElements,
+typedef void (optimizationFunction_splm_t)(const double*   p,
+                                           double*         x,
+                                           cholmod_sparse* Jt,
+                                           void*           cookie);
+
+double optimize_sparseLM(double* p, unsigned int Nstate,
+                         unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
                          optimizationFunction_splm_t* f, void* cookie);
 
-void testGradient(int var, const double* p0, void* cookie, int Nstate, int Nmeas, int Jnnz, optimizationFunction_splm_t* callback);
+void testGradient(unsigned int var, const double* p0,
+                  unsigned int Nstate, unsigned int Nmeas, unsigned int Jnnz,
+                  optimizationFunction_splm_t* callback, void* cookie);
