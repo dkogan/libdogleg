@@ -219,8 +219,9 @@ static void computeCallbackOperatingPoint(operatingPoint_t* point, solverContext
 }
 static double computeExpectedImprovement(const double* step, const operatingPoint_t* point)
 {
-  // The ideal improvement I should have seen is
-  // norm2(x0) - norm2(x0 + J*step) = -inner(step, Jt_x) - norm2(J*step)
+  // My error function is F=norm2(f(p + step)). F(0) - F(step) =
+  // = norm2(x) - norm2(x + J*step) = -2*inner(x,J*step) - norm2(J*step)
+  // = -2*inner(Jt_x,step) - norm2(J*step)
   return
     - inner(point->Jt_x, step, point->Jt->nrow)
     - norm2_mul_spmatrix_t_densevector(point->Jt, step);
@@ -242,8 +243,15 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   // first, I look at a step in the steepest direction that minimizes my
   // quadratic error function (Cauchy point). If this is past my trust region,
   // I move as far as the trust region allows along the steepest descent
-  // direction
-
+  // direction. My error function is F=norm2(f(p)). dF/dP = 2*ft*J.
+  // This is proportional to Jt_x, which is thus the steepest ascent direction.
+  //
+  // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
+  // point is where F(k) is at a minumum:
+  // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
+  // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
+  // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
+  // Summary:
   // the steepest direction is parallel to Jt*x. The Cauchy point is at
   // k*Jt*x where k       = -norm2(Jt*x)/norm2(J*Jt*x)
   double norm2_Jt_x       = norm2(pointFrom->Jt_x, pointFrom->Jt->nrow);
