@@ -223,7 +223,7 @@ static double computeExpectedImprovement(const double* step, const operatingPoin
   // = norm2(x) - norm2(x + J*step) = -2*inner(x,J*step) - norm2(J*step)
   // = -2*inner(Jt_x,step) - norm2(J*step)
   return
-    - inner(point->Jt_x, step, point->Jt->nrow)
+    - 2.0*inner(point->Jt_x, step, point->Jt->nrow)
     - norm2_mul_spmatrix_t_densevector(point->Jt, step);
 }
 
@@ -256,12 +256,12 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   // k*Jt*x where k       = -norm2(Jt*x)/norm2(J*Jt*x)
   double norm2_Jt_x       = norm2(pointFrom->Jt_x, pointFrom->Jt->nrow);
   double norm2_J_Jt_x     = norm2_mul_spmatrix_t_densevector(pointFrom->Jt, pointFrom->Jt_x);
-  double k                = norm2_Jt_x / norm2_J_Jt_x;
+  double k                = -norm2_Jt_x / norm2_J_Jt_x;
   double cauchyStepSizeSq = k*k * norm2_Jt_x;
 
   vec_copy_scaled(update_cauchy,
-                  pointFrom->Jt_x, -sqrt(norm2_Jt_x) * delta,
-                  pointFrom->Jt->nrow);
+                  pointFrom->Jt_x, k, pointFrom->Jt->nrow);
+
   fprintf(stderr, "cauchy step size %f\n", sqrt(cauchyStepSizeSq));
 
   if(cauchyStepSizeSq >= delta*delta)
@@ -337,9 +337,11 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     // to make 100% sure the descriminant is positive, I choose a to be the
     // cauchy step.  The solution must have k in [0,1], so I much have the
     // +sqrt side, since the other one is negative
-    double dsq    = delta*delta;
-    double norm2a = cauchyStepSizeSq;
-    double a_minus_b[pointFrom->Jt->nrow];
+    double  dsq    = delta*delta;
+    double  norm2a = cauchyStepSizeSq;
+    double* a      = update_cauchy;
+    double* b      = update_gn;
+    double  a_minus_b[pointFrom->Jt->nrow];
 
     vec_sub(a_minus_b, update_cauchy, update_gn, pointFrom->Jt->nrow);
     double l2           = norm2(a_minus_b, pointFrom->Jt->nrow);
