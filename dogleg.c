@@ -2,7 +2,6 @@
 #include <math.h>
 #include <string.h>
 #include <malloc.h>
-#include <cholmod.h>
 #include "dogleg.h"
 
 #define DOGLEG_DEBUG
