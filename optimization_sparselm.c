@@ -10,13 +10,13 @@
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
-#define MAX_ITERATIONS        100
-#define DELTA0                1.0
+#define MAX_ITERATIONS 100
+#define TRUSTREGION0   1.0
 
-#define DELTA_DECREASE_FACTOR    0.1
-#define DELTA_INCREASE_FACTOR    2
-#define DELTA_INCREASE_THRESHOLD 0.75
-#define DELTA_DECREASE_THRESHOLD 0.25
+#define TRUSTREGION_DECREASE_FACTOR    0.1
+#define TRUSTREGION_INCREASE_FACTOR    2
+#define TRUSTREGION_INCREASE_THRESHOLD 0.75
+#define TRUSTREGION_DECREASE_THRESHOLD 0.25
 
 #define JT_X_THRESHOLD           1e-10
 #define UPDATE_THRESHOLD         1e-10
@@ -253,15 +253,14 @@ static double computeExpectedImprovement(const double* step, const operatingPoin
 }
 
 
-// takes a step from the given operating point, using the given delta (trust
-// region radius). Returns the expected improvement, based on the step taken
-// and the linearized x(p). If we can stop iterating, returns a negative
-// number
+// takes a step from the given operating point, using the given trust region
+// radius. Returns the expected improvement, based on the step taken and the
+// linearized x(p). If we can stop iterating, returns a negative number
 static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
-                           double delta, solverContext_t* ctx)
+                           double trustregion, solverContext_t* ctx)
 {
 #ifdef DOGLEG_DEBUG
-  fprintf(stderr, "taking step with delta %f\n", delta);
+  fprintf(stderr, "taking step with trustregion %f\n", trustregion);
 #endif
 
   double update_cauchy[pointFrom->Jt->nrow];
@@ -298,7 +297,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     fprintf(stderr, "cauchy step size %f\n", sqrt(cauchyStepSizeSq));
 #endif
 
-    if(cauchyStepSizeSq >= delta*delta)
+    if(cauchyStepSizeSq >= trustregion*trustregion)
     {
 #ifdef DOGLEG_DEBUG
       fprintf(stderr, "taking cauchy step\n");
@@ -349,7 +348,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     fprintf(stderr, "gn step size %f\n", sqrt(GaussNewtonStepSizeSq));
 #endif
 
-    if(GaussNewtonStepSizeSq <= delta*delta)
+    if(GaussNewtonStepSizeSq <= trustregion*trustregion)
     {
 #ifdef DOGLEG_DEBUG
       fprintf(stderr, "taking GN step\n");
@@ -382,7 +381,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
       // to make 100% sure the descriminant is positive, I choose a to be the
       // cauchy step.  The solution must have k in [0,1], so I much have the
       // +sqrt side, since the other one is negative
-      double        dsq    = delta*delta;
+      double        dsq    = trustregion*trustregion;
       double        norm2a = cauchyStepSizeSq;
       const double* a      = update_cauchy;
       const double* b      = update_gn;
@@ -439,11 +438,12 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 }
 
 
-// I have a candidate step. I adjust the delta accordingly, and also report whether this step
-// should be accepted (0 == rejected, otherwise accepted)
+// I have a candidate step. I adjust the trustregion accordingly, and also
+// report whether this step should be accepted (0 == rejected, otherwise
+// accepted)
 static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
                                           const operatingPoint_t* after,
-                                          double* delta,
+                                          double* trustregion,
                                           double expectedImprovement)
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
@@ -453,15 +453,15 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 #endif
 
   double rho = observedImprovement / expectedImprovement;
-  if     (rho > DELTA_INCREASE_THRESHOLD) *delta *= DELTA_INCREASE_FACTOR;
-  else if(rho < DELTA_DECREASE_THRESHOLD) *delta *= DELTA_DECREASE_FACTOR;
+  if     (rho > TRUSTREGION_INCREASE_THRESHOLD) *trustregion *= TRUSTREGION_INCREASE_FACTOR;
+  else if(rho < TRUSTREGION_DECREASE_THRESHOLD) *trustregion *= TRUSTREGION_DECREASE_FACTOR;
 
   return rho > 0.0;
 }
 
 static void runOptimizer(solverContext_t* ctx)
 {
-  double delta = DELTA0;
+  double trustregion = TRUSTREGION0;
 
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
     return;
@@ -481,7 +481,7 @@ static void runOptimizer(solverContext_t* ctx)
 #endif
 
       double expectedImprovement =
-        takeStepFrom(ctx->beforeStep, ctx->afterStep->p, delta, ctx);
+        takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
 
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
@@ -489,7 +489,7 @@ static void runOptimizer(solverContext_t* ctx)
 
       double afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
 
-      if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &delta,
+      if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
       {
 #ifdef DOGLEG_DEBUG
@@ -524,7 +524,7 @@ static void runOptimizer(solverContext_t* ctx)
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
-      if(TRUSTREGION_THRESHOLD*norm2(ctx->p_max, ctx->beforeStep->Jt->nrow) > delta*delta)
+      if(TRUSTREGION_THRESHOLD*norm2(ctx->p_max, ctx->beforeStep->Jt->nrow) > trustregion*trustregion)
       {
 #ifdef DOGLEG_DEBUG
         fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
