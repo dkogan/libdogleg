@@ -1,0 +1,30 @@
+This is a general purpose sparse optimizer to solve data fitting problems. It tries to find the
+vector p that minimizes
+
+ norm2( x )
+
+where x = f(p) is a vector that has higher dimensionality than p. The user passes in a callback
+function that takes in the vector p and returns the vector x and a matrix of derivatives J =
+df/dp. J is a sparse matrix, which results in substantial increases in computational efficiency if
+most entries of J are 0. J is stored row-first in the callback routine. libdogleg uses a
+column-first data representation so it references the transpose of J (called Jt). J stored row-first
+is identical to Jt stored column-first; this is purely a naming choice.
+
+This library implements Powell's dog-leg algorithm to solve the problem. The sparse matrix algebra
+is handled by CHOLMOD. CHOLMOD has pieces that are licensed under the GPL and the LGPL. I use only
+the LGPL ones. Due to this I lose some convenience (all simple sparse matrix arithmetic in CHOLMOD
+is GPL-ed) and some performance (the fancier computational methods, such as supernodal analysis are
+GPL-ed). This is all manageable, though
+
+
+Areas to improve
+
+The trust region at the start is hard-coded to 1.0. This means the initial iterations don't make any
+optimization progress, but rather act to find a resonable trust region.
+
+The current implementation chokes if JtJ is singular. This happens if at a particular operating
+point the vector x has no dependence at all on some elements of p. 
+
+There's an inefficiency in that the callback always returns x and J. When I evaluate and reject a
+step, I do not end up using J at all. Dependng on the callback function, it may be better to ask for
+x and then, if the step is accepted, to ask for J.
