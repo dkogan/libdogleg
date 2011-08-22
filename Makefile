@@ -27,7 +27,7 @@ all: $(TARGETS)
 ifdef DESTDIR
 install:
 	mkdir -p $(DESTDIR)/usr/lib/
-	install -m 0644 -s $(TARGETS) $(DESTDIR)/usr/lib/
+	install -m 0644 $(TARGETS) $(DESTDIR)/usr/lib/
 	cd $(DESTDIR)/usr/lib/ && \
 	ln -fs $(TARGET_SO) libdogleg.so.1 && \
 	ln -fs $(TARGET_SO) libdogleg.so && \
