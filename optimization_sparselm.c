@@ -368,7 +368,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
       fprintf(stderr, "negative discriminant: %f!\n", discriminant);
       discriminant = 0.0;
     }
-    double k            = (neg_c + sqrt(discriminant))/l2;
+    double k = (neg_c + sqrt(discriminant))/l2;
 
     // I can rehash this to not store this data array at all, but it's clearer
     // to
