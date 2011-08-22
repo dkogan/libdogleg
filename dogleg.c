@@ -581,6 +581,13 @@ static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
   *point = NULL;
 }
 
+static void set_cholmod_options(cholmod_common* common)
+{
+  // I want to use LGPL parts of CHOLMOD only, so I turn off the supernodal routines. This gave me a
+  // 25% performance hit in the solver for a particular set of optical calibration data.
+  common->supernodal = 0;
+}
+
 double optimize(double* p, unsigned int Nstate,
                 unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
                 dogleg_callback_t* f, void* cookie)
@@ -594,6 +601,8 @@ double optimize(double* p, unsigned int Nstate,
     fprintf(stderr, "Couldn't initialize CHOLMOD\n");
     return -1.0;
   }
+
+  set_cholmod_options(&ctx.common);
 
   ctx.beforeStep = allocOperatingPoint(Nstate, numMeasurements, numNonzeroJacobianElements, &ctx.common);
   ctx.afterStep  = allocOperatingPoint(Nstate, numMeasurements, numNonzeroJacobianElements, &ctx.common);
