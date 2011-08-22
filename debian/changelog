@@ -1,0 +1,5 @@
+libdogleg (0.01-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Dima Kogan <dima@unknown>  Mon, 22 Aug 2011 00:33:18 -0700
