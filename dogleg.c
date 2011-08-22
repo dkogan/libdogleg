@@ -581,9 +581,9 @@ static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
   *point = NULL;
 }
 
-double optimize_sparseLM(double* p, unsigned int Nstate,
-                         unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
-                         dogleg_callback_t* f, void* cookie)
+double optimize(double* p, unsigned int Nstate,
+                unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
+                dogleg_callback_t* f, void* cookie)
 {
   solverContext_t ctx = {.f             = f,
                          .cookie        = cookie,
