@@ -4,7 +4,7 @@
 #include <malloc.h>
 #include "dogleg.h"
 
-#define DOGLEG_DEBUG
+//#define DOGLEG_DEBUG
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
