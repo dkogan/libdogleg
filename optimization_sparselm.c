@@ -8,7 +8,7 @@
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
-#define MAX_ITERATIONS         100
+#define MAX_ITERATIONS        100
 #define DELTA_DECREASE_FACTOR 0.1
 #define DELTA_INCREASE_FACTOR 2
 
