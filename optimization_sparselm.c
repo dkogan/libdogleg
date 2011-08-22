@@ -11,8 +11,12 @@
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
 #define MAX_ITERATIONS        100
-#define DELTA_DECREASE_FACTOR 0.1
-#define DELTA_INCREASE_FACTOR 2
+#define DELTA0                1.0
+
+#define DELTA_DECREASE_FACTOR    0.1
+#define DELTA_INCREASE_FACTOR    2
+#define DELTA_INCREASE_THRESHOLD 0.75
+#define DELTA_DECREASE_THRESHOLD 0.25
 
 // used to consolidate the casts
 #define P(A, index) ((unsigned int*)((A)->p))[index]
@@ -403,17 +407,15 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 #endif
 
   double rho = observedImprovement / expectedImprovement;
-  if(rho > 0.75)
-    *delta *= DELTA_INCREASE_FACTOR;
-  else if(rho < 0.25)
-    *delta *= DELTA_DECREASE_FACTOR;
+  if     (rho > DELTA_INCREASE_THRESHOLD) *delta *= DELTA_INCREASE_FACTOR;
+  else if(rho < DELTA_DECREASE_THRESHOLD) *delta *= DELTA_DECREASE_FACTOR;
 
   return rho > 0.0;
 }
 
 static void runOptimizer(solverContext_t* ctx)
 {
-  double delta = 1.0;
+  double delta = DELTA0;
 
   computeCallbackOperatingPoint(ctx->beforeStep, ctx);
 
