@@ -47,7 +47,7 @@ static double getGrad(unsigned int var, int meas, const cholmod_sparse* Jt)
 
 void testGradient(unsigned int var, const double* p0,
                   unsigned int Nstate, unsigned int Nmeas, unsigned int Jnnz,
-                  optimizationFunction_splm_t* callback, void* cookie)
+                  dogleg_callback_t* callback, void* cookie)
 {
   double           x0[Nmeas];
   double           x [Nmeas];
@@ -120,8 +120,8 @@ typedef struct
 {
   cholmod_common  common;
 
-  optimizationFunction_splm_t* f;
-  void*                        cookie;
+  dogleg_callback_t* f;
+  void*              cookie;
 
   operatingPoint_t* beforeStep;
   operatingPoint_t* afterStep;
@@ -583,7 +583,7 @@ static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
 
 double optimize_sparseLM(double* p, unsigned int Nstate,
                          unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
-                         optimizationFunction_splm_t* f, void* cookie)
+                         dogleg_callback_t* f, void* cookie)
 {
   solverContext_t ctx = {.f             = f,
                          .cookie        = cookie,
