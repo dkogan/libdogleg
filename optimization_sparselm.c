@@ -331,21 +331,21 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     // l2 k^2 + 2*c k + norm2(a)-dsq = 0
     //
     // This is a simple quadratic equation:
-    // k = (-2*c +- sqrt(c*c - l2*(norm2(a)-dsq)))/(2*l2)
+    // k = (-2*c +- sqrt(4*c*c - 4*l2*(norm2(a)-dsq)))/(2*l2)
     //   = (-c +- sqrt(c*c - l2*(norm2(a)-dsq)))/l2
 
     // to make 100% sure the descriminant is positive, I choose a to be the
     // cauchy step.  The solution must have k in [0,1], so I much have the
     // +sqrt side, since the other one is negative
-    double  dsq    = delta*delta;
-    double  norm2a = cauchyStepSizeSq;
-    double* a      = update_cauchy;
-    double* b      = update_gn;
-    double  a_minus_b[pointFrom->Jt->nrow];
+    double        dsq    = delta*delta;
+    double        norm2a = cauchyStepSizeSq;
+    const double* a      = update_cauchy;
+    const double* b      = update_gn;
+    double        a_minus_b[pointFrom->Jt->nrow];
 
-    vec_sub(a_minus_b, update_cauchy, update_gn, pointFrom->Jt->nrow);
-    double l2           = norm2(a_minus_b, pointFrom->Jt->nrow);
-    double neg_c        = inner(a_minus_b, update_cauchy, pointFrom->Jt->nrow);
+    vec_sub(a_minus_b, a, b, pointFrom->Jt->nrow);
+    double l2           = norm2(a_minus_b,    pointFrom->Jt->nrow);
+    double neg_c        = inner(a_minus_b, a, pointFrom->Jt->nrow);
     double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
     if(discriminant < 0.0)
     {
@@ -357,7 +357,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     // I can rehash this to not store this data array at all, but it's clearer
     // to
     double update_dogleg[pointFrom->Jt->nrow];
-    vec_interpolate(update_dogleg, update_cauchy, -k, a_minus_b, pointFrom->Jt->nrow);
+    vec_interpolate(update_dogleg, a, -k, a_minus_b, pointFrom->Jt->nrow);
     vec_add(newp, pointFrom->p, update_dogleg, pointFrom->Jt->nrow);
 
     expectedImprovement = computeExpectedImprovement(update_dogleg, pointFrom);
