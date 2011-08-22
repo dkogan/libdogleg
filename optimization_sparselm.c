@@ -381,7 +381,7 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
                                           double* delta,
                                           double expectedImprovement)
 {
-  double observedImprovement = after->norm2_x - before->norm2_x;
+  double observedImprovement = before->norm2_x - after->norm2_x;
 
   fprintf(stderr, "expected improvement: %f, got improvement %f\n", expectedImprovement, observedImprovement);
 
