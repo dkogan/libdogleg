@@ -487,7 +487,7 @@ static void runOptimizer(solverContext_t* ctx)
       if(expectedImprovement < 0.0)
         return;
 
-      double afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep,  ctx);
+      double afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &delta,
                                          expectedImprovement) )
