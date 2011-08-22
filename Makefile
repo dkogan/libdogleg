@@ -28,11 +28,10 @@ ifdef DESTDIR
 install:
 	mkdir -p $(DESTDIR)/usr/lib/
 	install -m 0644 -s $(TARGETS) $(DESTDIR)/usr/lib/
-	cd $(DESTDIR)/usr/lib/
-	ln -fs $(TARGET_SO) libdogleg.so.1
-	ln -fs $(TARGET_SO) libdogleg.so
+	cd $(DESTDIR)/usr/lib/ && \
+	ln -fs $(TARGET_SO) libdogleg.so.1 && \
+	ln -fs $(TARGET_SO) libdogleg.so && \
 	cd -
-
 	mkdir -p $(DESTDIR)/usr/include/
 	install -m 0644 $(HEADERS) $(DESTDIR)/usr/include/
 else
