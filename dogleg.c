@@ -3,7 +3,7 @@
 #include <string.h>
 #include <malloc.h>
 #include <cholmod.h>
-#include "optimization_sparselm.h"
+#include "dogleg.h"
 
 #define DOGLEG_DEBUG
 
