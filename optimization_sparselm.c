@@ -366,7 +366,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
 
     double updateNorm = norm2(update_dogleg, pointFrom->Jt->nrow);
-    fprintf(stderr, "k %f, norm %f\n", k, updateNorm);
+    fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
   }
 
   cholmod_free_dense(&update_dense_gn, &ctx->common);
@@ -402,8 +402,10 @@ static void runOptimizer(solverContext_t* ctx)
 
   for(int stepCount=0; stepCount<MAX_ITERATIONS; stepCount++)
   {
+    fprintf(stderr, "\n\n\n");
     while(1)
     {
+      fprintf(stderr, "\n\n");
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, delta, ctx);
       computeCallbackOperatingPoint(ctx->afterStep,  ctx);
