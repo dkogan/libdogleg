@@ -492,6 +492,9 @@ static void runOptimizer(solverContext_t* ctx)
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &delta,
                                          expectedImprovement) )
       {
+#ifdef DOGLEG_DEBUG
+        fprintf(stderr, "accepted step\n");
+#endif
         // I accept this step, so the after-step operating point is the before-step operating point
         // of the next iteration. I exchange the before- and after-step structures so that all the
         // pointers are still around and I don't have to re-allocate
@@ -514,6 +517,10 @@ static void runOptimizer(solverContext_t* ctx)
 
         break;
       }
+
+#ifdef DOGLEG_DEBUG
+      fprintf(stderr, "rejected step\n");
+#endif
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
