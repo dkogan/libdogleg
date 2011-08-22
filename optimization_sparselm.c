@@ -5,6 +5,8 @@
 #include <cholmod.h>
 #include "optimization_sparselm.h"
 
+#define DOGLEG_DEBUG
+
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
@@ -234,9 +236,9 @@ static double computeExpectedImprovement(const double* step, const operatingPoin
 static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
                            double delta, solverContext_t* ctx)
 {
+#ifdef DOGLEG_DEBUG
   fprintf(stderr, "taking step with delta %f\n", delta);
-
-
+#endif
 
   double update_cauchy[pointFrom->Jt->nrow];
 
@@ -262,11 +264,16 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   vec_copy_scaled(update_cauchy,
                   pointFrom->Jt_x, k, pointFrom->Jt->nrow);
 
+#ifdef DOGLEG_DEBUG
   fprintf(stderr, "cauchy step size %f\n", sqrt(cauchyStepSizeSq));
+#endif
 
   if(cauchyStepSizeSq >= delta*delta)
   {
+#ifdef DOGLEG_DEBUG
     fprintf(stderr, "taking cauchy step\n");
+#endif
+
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
     vec_add(newp, pointFrom->p, update_cauchy, pointFrom->Jt->nrow);
@@ -309,17 +316,26 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
   double GaussNewtonStepSizeSq = norm2(update_gn, pointFrom->Jt->nrow);
   double expectedImprovement;
+#ifdef DOGLEG_DEBUG
   fprintf(stderr, "gn step size %f\n", sqrt(GaussNewtonStepSizeSq));
+#endif
+
   if(GaussNewtonStepSizeSq <= delta*delta)
   {
+#ifdef DOGLEG_DEBUG
     fprintf(stderr, "taking GN step\n");
+#endif
+
     // full Gauss-Newton step lies within my trust region. Take the full step
     vec_add(newp, pointFrom->p, update_gn, pointFrom->Jt->nrow);
     expectedImprovement = computeExpectedImprovement(update_gn, pointFrom);
   }
   else
   {
+#ifdef DOGLEG_DEBUG
     fprintf(stderr, "taking interpolated step\n");
+#endif
+
 
     // full Gauss-Newton step lies outside my trust region, so I interpolate
     // between the Cauchy-point step and the Gauss-Newton step to find a step
@@ -362,11 +378,10 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
     expectedImprovement = computeExpectedImprovement(update_dogleg, pointFrom);
 
-
-
-
+#ifdef DOGLEG_DEBUG
     double updateNorm = norm2(update_dogleg, pointFrom->Jt->nrow);
     fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
+#endif
   }
 
   cholmod_free_dense(&update_dense_gn, &ctx->common);
@@ -383,7 +398,9 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
 
+#ifdef DOGLEG_DEBUG
   fprintf(stderr, "expected improvement: %f, got improvement %f\n", expectedImprovement, observedImprovement);
+#endif
 
   double rho = observedImprovement / expectedImprovement;
   if(rho > 0.75)
@@ -402,10 +419,16 @@ static void runOptimizer(solverContext_t* ctx)
 
   for(int stepCount=0; stepCount<MAX_ITERATIONS; stepCount++)
   {
+#ifdef DOGLEG_DEBUG
     fprintf(stderr, "\n\n\n");
+#endif
+
     while(1)
     {
+#ifdef DOGLEG_DEBUG
       fprintf(stderr, "\n\n");
+#endif
+
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, delta, ctx);
       computeCallbackOperatingPoint(ctx->afterStep,  ctx);
