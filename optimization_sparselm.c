@@ -393,7 +393,7 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 
   return rho > 0.0;
 }
- 
+
 static void runOptimizer(solverContext_t* ctx)
 {
   double delta = 1.0;
@@ -404,7 +404,7 @@ static void runOptimizer(solverContext_t* ctx)
   {
     while(1)
     {
-      double expectedImprovement = 
+      double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, delta, ctx);
       computeCallbackOperatingPoint(ctx->afterStep,  ctx);
 
