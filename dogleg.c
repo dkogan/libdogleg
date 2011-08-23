@@ -123,6 +123,8 @@ typedef struct
 
   // whether the current update vectors are correct or not
   int updateCauchy_valid, updateGN_valid;
+
+  int didStepToEdgeOfTrustRegion;
 } operatingPoint_t;
 
 typedef struct
@@ -419,6 +421,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
                     trustregion / sqrt(pointFrom->updateCauchy_lensq),
                     pointFrom->Jt->nrow);
     update = update_array;
+    pointFrom->didStepToEdgeOfTrustRegion = 1;
   }
   else
   {
@@ -437,6 +440,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
       // full Gauss-Newton step lies within my trust region. Take the full step
       update = pointFrom->updateGN_cholmoddense->x;
+      pointFrom->didStepToEdgeOfTrustRegion = 0;
     }
     else
     {
@@ -449,6 +453,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
       // that takes me to the edge of my trust region.
       computeInterpolatedUpdate(update_array, pointFrom, trustregion);
       update = update_array;
+      pointFrom->didStepToEdgeOfTrustRegion = 1;
     }
   }
 
@@ -488,8 +493,12 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 #endif
 
   double rho = observedImprovement / expectedImprovement;
-  if     (rho > TRUSTREGION_INCREASE_THRESHOLD) *trustregion *= TRUSTREGION_INCREASE_FACTOR;
-  else if(rho < TRUSTREGION_DECREASE_THRESHOLD) *trustregion *= TRUSTREGION_DECREASE_FACTOR;
+  if(rho < TRUSTREGION_DECREASE_THRESHOLD)
+    *trustregion *= TRUSTREGION_DECREASE_FACTOR;
+  else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
+  {
+    *trustregion *= TRUSTREGION_INCREASE_FACTOR;
+  }
 
   return rho > 0.0;
 }
