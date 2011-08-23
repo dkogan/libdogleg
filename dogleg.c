@@ -114,6 +114,15 @@ typedef struct
   double          norm2_x;
   cholmod_sparse* Jt;
   double*         Jt_x;
+
+  // the cached update vectors. It's useful to cache these so that when a step is rejected, we can
+  // reuse these when we retry
+  double*        updateCauchy;
+  cholmod_dense* updateGN_cholmoddense;
+  double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
+
+  // whether the current update vectors are correct or not
+  int updateCauchy_valid, updateGN_valid;
 } operatingPoint_t;
 
 typedef struct
@@ -217,12 +226,141 @@ static double norm2_mul_spmatrix_t_densevector(const cholmod_sparse* At, const d
 
 
 
+static void computeCauchyUpdate(operatingPoint_t* point)
+{
+  // I already have this data, so don't need to recompute
+  if(point->updateCauchy_valid)
+    return;
+  point->updateCauchy_valid = 1;
+
+  // I look at a step in the steepest direction that minimizes my
+  // quadratic error function (Cauchy point). If this is past my trust region,
+  // I move as far as the trust region allows along the steepest descent
+  // direction. My error function is F=norm2(f(p)). dF/dP = 2*ft*J.
+  // This is proportional to Jt_x, which is thus the steepest ascent direction.
+  //
+  // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
+  // point is where F(k) is at a minumum:
+  // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
+  // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
+  // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
+  // Summary:
+  // the steepest direction is parallel to Jt*x. The Cauchy point is at
+  // k*Jt*x where k = -norm2(Jt*x)/norm2(J*Jt*x)
+  double norm2_Jt_x       = norm2(point->Jt_x, point->Jt->nrow);
+  double norm2_J_Jt_x     = norm2_mul_spmatrix_t_densevector(point->Jt, point->Jt_x);
+  double k                = -norm2_Jt_x / norm2_J_Jt_x;
+
+  point->updateCauchy_lensq = k*k * norm2_Jt_x;
+
+  vec_copy_scaled(point->updateCauchy,
+                  point->Jt_x, k, point->Jt->nrow);
+
+#ifdef DOGLEG_DEBUG
+  fprintf(stderr, "cauchy step size %f\n", sqrt(point->updateCauchy_lensq));
+#endif
+}
+
+static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* ctx)
+{
+  // I already have this data, so don't need to recompute
+  if(point->updateGN_valid)
+    return;
+  point->updateGN_valid = 1;
+
+  // I'm assuming the pattern of zeros will remain the same throughout, so I
+  // analyze only once
+  if(ctx->factorization == NULL)
+  {
+    ctx->factorization = cholmod_analyze(point->Jt, &ctx->common);
+    ASSERT(ctx->factorization != NULL);
+  }
+
+  ASSERT( cholmod_factorize(point->Jt,
+                            ctx->factorization, &ctx->common) );
+
+  // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
+  cholmod_dense Jt_x_dense = {.nrow  = point->Jt->nrow,
+                              .ncol  = 1,
+                              .nzmax = point->Jt->nrow,
+                              .d     = point->Jt->nrow,
+                              .x     = point->Jt_x,
+                              .xtype = CHOLMOD_REAL,
+                              .dtype = CHOLMOD_DOUBLE};
+
+  if(point->updateGN_cholmoddense != NULL)
+    cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
+  
+  point->updateGN_cholmoddense = cholmod_solve(0, ctx->factorization,
+                                         &Jt_x_dense,
+                                         &ctx->common);
+  vec_negate(point->updateGN_cholmoddense->x,
+             point->Jt->nrow); // should be more efficient than this later
+
+  point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x,
+                                point->Jt->nrow);
+#ifdef DOGLEG_DEBUG
+  fprintf(stderr, "gn step size %f\n", sqrt(point->updateGN_lensq));
+#endif
+}
+
+static void computeInterpolatedUpdate(double* update_dogleg,
+                                      operatingPoint_t* point,
+                                      double trustregion)
+{
+  // I interpolate between the Cauchy-point step and the Gauss-Newton step
+  // to find a step that takes me to the edge of my trust region.
+  //
+  // I have something like norm2(a + k*(b-a)) = dsq
+  // = norm2(a) + 2*at*(b-a) * k + norm2(b-a)*k^2 = dsq
+  // let c = at*(b-a), l2 = norm2(b-a) ->
+  // l2 k^2 + 2*c k + norm2(a)-dsq = 0
+  //
+  // This is a simple quadratic equation:
+  // k = (-2*c +- sqrt(4*c*c - 4*l2*(norm2(a)-dsq)))/(2*l2)
+  //   = (-c +- sqrt(c*c - l2*(norm2(a)-dsq)))/l2
+
+  // to make 100% sure the descriminant is positive, I choose a to be the
+  // cauchy step.  The solution must have k in [0,1], so I much have the
+  // +sqrt side, since the other one is negative
+  double        dsq    = trustregion*trustregion;
+  double        norm2a = point->updateCauchy_lensq;
+  const double* a      = point->updateCauchy;
+  const double* b      = point->updateGN_cholmoddense->x;
+  double        a_minus_b[point->Jt->nrow];
+
+  vec_sub(a_minus_b, a, b, point->Jt->nrow);
+  double l2           = norm2(a_minus_b,    point->Jt->nrow);
+  double neg_c        = inner(a_minus_b, a, point->Jt->nrow);
+  double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
+  if(discriminant < 0.0)
+  {
+    fprintf(stderr, "negative discriminant: %f!\n", discriminant);
+    discriminant = 0.0;
+  }
+  double k = (neg_c + sqrt(discriminant))/l2;
+
+  // I can rehash this to not store this data array at all, but it's clearer
+  // to
+  vec_interpolate(update_dogleg, a, -k, a_minus_b, point->Jt->nrow);
+
+#ifdef DOGLEG_DEBUG
+  double updateNorm = norm2(update_dogleg, point->Jt->nrow);
+  fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
+#endif
+}
+
 // takes in point->p, and computes all the quantities derived from it, storing
 // the result in the other members of the operatingPoint structure. Returns
 // true if the gradient-size termination criterion has been met
 static int computeCallbackOperatingPoint(operatingPoint_t* point, solverContext_t* ctx)
 {
   (*ctx->f)(point->p, point->x, point->Jt, ctx->cookie);
+
+  // I just got a new operating point, so the current update vectors aren't
+  // valid anymore, and should be recomputed, as needed
+  point->updateCauchy_valid = 0;
+  point->updateGN_valid     = 0;
 
   // compute the 2-norm of the current error vector
   // At some point this should be changed to use the call from libminimath
@@ -262,100 +400,39 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   fprintf(stderr, "taking step with trustregion %f\n", trustregion);
 #endif
 
-  double update_cauchy[pointFrom->Jt->nrow];
   double update_dogleg[pointFrom->Jt->nrow];
-  cholmod_dense* update_dense_gn = NULL;
-
   double* update;
 
-  while(1) // not a real loop. I always break out at 1st pass. Used for flow control
+
+  computeCauchyUpdate(pointFrom);
+
+  if(pointFrom->updateCauchy_lensq >= trustregion*trustregion)
   {
-    // first, I look at a step in the steepest direction that minimizes my
-    // quadratic error function (Cauchy point). If this is past my trust region,
-    // I move as far as the trust region allows along the steepest descent
-    // direction. My error function is F=norm2(f(p)). dF/dP = 2*ft*J.
-    // This is proportional to Jt_x, which is thus the steepest ascent direction.
-    //
-    // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
-    // point is where F(k) is at a minumum:
-    // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
-    // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
-    // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
-    // Summary:
-    // the steepest direction is parallel to Jt*x. The Cauchy point is at
-    // k*Jt*x where k       = -norm2(Jt*x)/norm2(J*Jt*x)
-    double norm2_Jt_x       = norm2(pointFrom->Jt_x, pointFrom->Jt->nrow);
-    double norm2_J_Jt_x     = norm2_mul_spmatrix_t_densevector(pointFrom->Jt, pointFrom->Jt_x);
-    double k                = -norm2_Jt_x / norm2_J_Jt_x;
-    double cauchyStepSizeSq = k*k * norm2_Jt_x;
-
-    vec_copy_scaled(update_cauchy,
-                    pointFrom->Jt_x, k, pointFrom->Jt->nrow);
-
 #ifdef DOGLEG_DEBUG
-    fprintf(stderr, "cauchy step size %f\n", sqrt(cauchyStepSizeSq));
+    fprintf(stderr, "taking cauchy step\n");
 #endif
 
-    if(cauchyStepSizeSq >= trustregion*trustregion)
-    {
-#ifdef DOGLEG_DEBUG
-      fprintf(stderr, "taking cauchy step\n");
-#endif
-
-      // cauchy step goes beyond my trust region, so I do a gradient descent
-      // to the edge of my trust region and call it good
-      update = update_cauchy;
-      break;
-    }
-
+    // cauchy step goes beyond my trust region, so I do a gradient descent
+    // to the edge of my trust region and call it good
+    update = pointFrom->updateCauchy;
+  }
+  else
+  {
     // I'm not yet done. The cauchy point is within the trust region, so I can
-    // go further.
-
-    // I look at the full Gauss-Newton step. If this is within the trust
-    // region, I use it. Otherwise, I find the point at the edge of my trust
-    // region that lies on a straight line between the Cauchy point and the
-    // Gauss-Newton solution, and use that. This is the heart of Powell's
+    // go further. I look at the full Gauss-Newton step. If this is within the
+    // trust region, I use it. Otherwise, I find the point at the edge of my
+    // trust region that lies on a straight line between the Cauchy point and
+    // the Gauss-Newton solution, and use that. This is the heart of Powell's
     // dog-leg algorithm.
-
-    // I'm assuming the pattern of zeros will remain the same throughout, so I
-    // analyze only once
-    if(ctx->factorization == NULL)
-    {
-      ctx->factorization = cholmod_analyze(pointFrom->Jt, &ctx->common);
-      ASSERT(ctx->factorization != NULL);
-    }
-
-    ASSERT( cholmod_factorize(pointFrom->Jt,
-                              ctx->factorization, &ctx->common) );
-
-    // solve JtJ*update_gn = Jt*x. Gauss-Newton step is then -update_gn
-    cholmod_dense Jt_x_dense = {.nrow  = pointFrom->Jt->nrow,
-                                .ncol  = 1,
-                                .nzmax = pointFrom->Jt->nrow,
-                                .d     = pointFrom->Jt->nrow,
-                                .x     = pointFrom->Jt_x,
-                                .xtype = CHOLMOD_REAL,
-                                .dtype = CHOLMOD_DOUBLE};
-    cholmod_dense* update_dense_gn = cholmod_solve(0, ctx->factorization,
-                                                   &Jt_x_dense,
-                                                   &ctx->common);
-    double* update_gn = update_dense_gn->x;
-    vec_negate(update_gn, pointFrom->Jt->nrow); // should be more efficient than this later
-
-    double GaussNewtonStepSizeSq = norm2(update_gn, pointFrom->Jt->nrow);
-#ifdef DOGLEG_DEBUG
-    fprintf(stderr, "gn step size %f\n", sqrt(GaussNewtonStepSizeSq));
-#endif
-
-    if(GaussNewtonStepSizeSq <= trustregion*trustregion)
+    computeGaussNewtonUpdate(pointFrom, ctx);
+    if(pointFrom->updateGN_lensq <= trustregion*trustregion)
     {
 #ifdef DOGLEG_DEBUG
       fprintf(stderr, "taking GN step\n");
 #endif
 
       // full Gauss-Newton step lies within my trust region. Take the full step
-      update = update_gn;
-      break;
+      update = pointFrom->updateGN_cholmoddense->x;
     }
     else
     {
@@ -363,53 +440,16 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
       fprintf(stderr, "taking interpolated step\n");
 #endif
 
-
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
-      //
-      // I have something like norm2(a + k*(b-a)) = dsq
-      // = norm2(a) + 2*at*(b-a) * k + norm2(b-a)*k^2 = dsq
-      // let c = at*(b-a), l2 = norm2(b-a) ->
-      // l2 k^2 + 2*c k + norm2(a)-dsq = 0
-      //
-      // This is a simple quadratic equation:
-      // k = (-2*c +- sqrt(4*c*c - 4*l2*(norm2(a)-dsq)))/(2*l2)
-      //   = (-c +- sqrt(c*c - l2*(norm2(a)-dsq)))/l2
-
-      // to make 100% sure the descriminant is positive, I choose a to be the
-      // cauchy step.  The solution must have k in [0,1], so I much have the
-      // +sqrt side, since the other one is negative
-      double        dsq    = trustregion*trustregion;
-      double        norm2a = cauchyStepSizeSq;
-      const double* a      = update_cauchy;
-      const double* b      = update_gn;
-      double        a_minus_b[pointFrom->Jt->nrow];
-
-      vec_sub(a_minus_b, a, b, pointFrom->Jt->nrow);
-      double l2           = norm2(a_minus_b,    pointFrom->Jt->nrow);
-      double neg_c        = inner(a_minus_b, a, pointFrom->Jt->nrow);
-      double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
-      if(discriminant < 0.0)
-      {
-        fprintf(stderr, "negative discriminant: %f!\n", discriminant);
-        discriminant = 0.0;
-      }
-      double k = (neg_c + sqrt(discriminant))/l2;
-
-      // I can rehash this to not store this data array at all, but it's clearer
-      // to
-      vec_interpolate(update_dogleg, a, -k, a_minus_b, pointFrom->Jt->nrow);
-
-#ifdef DOGLEG_DEBUG
-      double updateNorm = norm2(update_dogleg, pointFrom->Jt->nrow);
-      fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
-#endif
+      computeInterpolatedUpdate(update_dogleg, pointFrom, trustregion);
 
       update = update_dogleg;
-      break;
     }
   }
+
+
 
   // take the step
   vec_add(newp, pointFrom->p, update, pointFrom->Jt->nrow);
@@ -421,19 +461,12 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   unsigned int i;
   for(i=0; i<pointFrom->Jt->nrow; i++)
     if( fabs(update[i]) > UPDATE_THRESHOLD*ctx->p_max[i])
-      break;
-  if(update_dense_gn != NULL)
-    cholmod_free_dense(&update_dense_gn, &ctx->common);
+      return expectedImprovement;
 
-  if(i == pointFrom->Jt->nrow)
-  {
 #ifdef DOGLEG_DEBUG
-    fprintf(stderr, "update small enough. Done iterating!\n");
+  fprintf(stderr, "update small enough. Done iterating!\n");
 #endif
-    return -1.0;
-  }
-
-  return expectedImprovement;
+  return -1.0;
 }
 
 
@@ -566,6 +599,14 @@ static operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
   point->Jt_x = malloc(Nstate * sizeof(point->Jt_x[0]));
   ASSERT(point->Jt_x != NULL);
 
+  // the cached update vectors
+  point->updateCauchy          = malloc(Nstate * sizeof(point->updateCauchy[0]));
+  point->updateGN_cholmoddense = NULL; // This will be allocated as it is used
+
+  // vectors don't have any valid data yet
+  point->updateCauchy_valid = 0;
+  point->updateGN_valid     = 0;
+
   return point;
 }
 
@@ -576,6 +617,12 @@ static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
 
   cholmod_free_sparse(&(*point)->Jt,   common);
   free((*point)->Jt_x);
+
+  // the cached update vectors
+  free((*point)->updateCauchy);
+
+  if((*point)->updateGN_cholmoddense != NULL)
+    cholmod_free_dense(&(*point)->updateGN_cholmoddense, common);
 
   free(*point);
   *point = NULL;
