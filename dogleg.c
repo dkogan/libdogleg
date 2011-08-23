@@ -400,7 +400,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   fprintf(stderr, "taking step with trustregion %f\n", trustregion);
 #endif
 
-  double update_dogleg[pointFrom->Jt->nrow];
+  double update_array[pointFrom->Jt->nrow];
   double* update;
 
 
@@ -414,7 +414,11 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
-    update = pointFrom->updateCauchy;
+    vec_copy_scaled(update_array,
+                    pointFrom->updateCauchy,
+                    trustregion / sqrt(pointFrom->updateCauchy_lensq),
+                    pointFrom->Jt->nrow);
+    update = update_array;
   }
   else
   {
@@ -443,9 +447,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
-      computeInterpolatedUpdate(update_dogleg, pointFrom, trustregion);
-
-      update = update_dogleg;
+      computeInterpolatedUpdate(update_array, pointFrom, trustregion);
+      update = update_array;
     }
   }
 
