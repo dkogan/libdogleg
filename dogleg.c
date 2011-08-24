@@ -50,9 +50,9 @@ static double getGrad(unsigned int var, int meas, const cholmod_sparse* Jt)
   return nan("nogradient");
 }
 
-void testGradient(unsigned int var, const double* p0,
-                  unsigned int Nstate, unsigned int Nmeas, unsigned int Jnnz,
-                  dogleg_callback_t* callback, void* cookie)
+void dogleg_testGradient(unsigned int var, const double* p0,
+                         unsigned int Nstate, unsigned int Nmeas, unsigned int Jnnz,
+                         dogleg_callback_t* callback, void* cookie)
 {
   double           x0[Nmeas];
   double           x [Nmeas];
@@ -644,9 +644,9 @@ static void set_cholmod_options(cholmod_common* common)
   common->supernodal = 0;
 }
 
-double optimize(double* p, unsigned int Nstate,
-                unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
-                dogleg_callback_t* f, void* cookie)
+double dogleg_optimize(double* p, unsigned int Nstate,
+                       unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
+                       dogleg_callback_t* f, void* cookie)
 {
   solverContext_t ctx = {.f             = f,
                          .cookie        = cookie,
