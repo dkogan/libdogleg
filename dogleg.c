@@ -13,7 +13,8 @@
 #define X(A, index) ((double*      )((A)->x))[index]
 
 
-// These are the optimizer parameters
+// These are the optimizer parameters. They have semi-arbitrary defaults. The
+// user should adjust them through the API
 static int DOGLEG_DEBUG = 0;
 
 static int    MAX_ITERATIONS = 100;
