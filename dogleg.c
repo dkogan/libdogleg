@@ -31,6 +31,94 @@ static double TRUSTREGION_THRESHOLD = 1e-10;
 
 
 
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// general boring linear algebra stuff
+// should really come from BLAS or libminimath
+//////////////////////////////////////////////////////////////////////////////////////////
+static double norm2(const double* x, unsigned int n)
+{
+  double result = 0;
+  for(unsigned int i=0; i<n; i++)
+    result += x[i]*x[i];
+  return result;
+}
+static double inner(const double* x, const double* y, unsigned int n)
+{
+  double result = 0;
+  for(unsigned int i=0; i<n; i++)
+    result += x[i]*y[i];
+  return result;
+}
+static void vec_copy_scaled(double* dest,
+                            const double* v, double scale, int n)
+{
+  for(int i=0; i<n; i++)
+    dest[i] = scale * v[i];
+}
+static void vec_add(double* dest,
+                    const double* v0, const double* v1, int n)
+{
+  for(int i=0; i<n; i++)
+    dest[i] = v0[i] + v1[i];
+}
+static void vec_sub(double* dest,
+                    const double* v0, const double* v1, int n)
+{
+  for(int i=0; i<n; i++)
+    dest[i] = v0[i] - v1[i];
+}
+static void vec_negate(double* v, int n)
+{
+  for(int i=0; i<n; i++)
+    v[i] *= -1.0;
+}
+// computes a + k*(b-a)
+static void vec_interpolate(double* dest,
+                            const double* a, double k, const double* b_minus_a,
+                            int n)
+{
+  for(int i=0; i<n; i++)
+    dest[i] = a[i] + k*b_minus_a[i];
+}
+
+// It would be nice to use the CHOLMOD implementation of these, but they're
+// licensed under the GPL
+static void mul_spmatrix_densevector(double* dest,
+                                     const cholmod_sparse* A, const double* x)
+{
+  memset(dest, 0, sizeof(double) * A->nrow);
+  for(unsigned int i=0; i<A->ncol; i++)
+  {
+    for(unsigned int j=P(A, i); j<P(A, i+1); j++)
+    {
+      int row = I(A, j);
+      dest[row] += x[i] * X(A, j);
+    }
+  }
+}
+static double norm2_mul_spmatrix_t_densevector(const cholmod_sparse* At, const double* x)
+{
+  // computes norm2(transpose(At) * x). For each row of A (col of At) I
+  // compute that element of A*x, and accumulate it immediately towards the
+  // norm
+  double result = 0.0;
+
+  for(unsigned int i=0; i<At->ncol; i++)
+  {
+    double dotproduct = 0.0;
+    for(unsigned int j=P(At, i); j<P(At, i+1); j++)
+    {
+      int row = I(At, j);
+      dotproduct += x[row] * X(At, j);
+    }
+    result += dotproduct * dotproduct;
+  }
+
+  return result;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // routines for gradient testing
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -147,91 +235,6 @@ typedef struct
   // find a good scale for the termination conditions
   double*           p_max;
 } solverContext_t;
-
-// This should really come from BLAS or libminimath
-static double norm2(const double* x, unsigned int n)
-{
-  double result = 0;
-  for(unsigned int i=0; i<n; i++)
-    result += x[i]*x[i];
-  return result;
-}
-static double inner(const double* x, const double* y, unsigned int n)
-{
-  double result = 0;
-  for(unsigned int i=0; i<n; i++)
-    result += x[i]*y[i];
-  return result;
-}
-static void vec_copy_scaled(double* dest,
-                            const double* v, double scale, int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = scale * v[i];
-}
-static void vec_add(double* dest,
-                    const double* v0, const double* v1, int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = v0[i] + v1[i];
-}
-static void vec_sub(double* dest,
-                    const double* v0, const double* v1, int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = v0[i] - v1[i];
-}
-static void vec_negate(double* v, int n)
-{
-  for(int i=0; i<n; i++)
-    v[i] *= -1.0;
-}
-// computes a + k*(b-a)
-static void vec_interpolate(double* dest,
-                            const double* a, double k, const double* b_minus_a,
-                            int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = a[i] + k*b_minus_a[i];
-}
-
-// It would be nice to use the CHOLMOD implementation of these, but they're
-// licensed under the GPL
-static void mul_spmatrix_densevector(double* dest,
-                                     const cholmod_sparse* A, const double* x)
-{
-  memset(dest, 0, sizeof(double) * A->nrow);
-  for(unsigned int i=0; i<A->ncol; i++)
-  {
-    for(unsigned int j=P(A, i); j<P(A, i+1); j++)
-    {
-      int row = I(A, j);
-      dest[row] += x[i] * X(A, j);
-    }
-  }
-}
-static double norm2_mul_spmatrix_t_densevector(const cholmod_sparse* At, const double* x)
-{
-  // computes norm2(transpose(At) * x). For each row of A (col of At) I
-  // compute that element of A*x, and accumulate it immediately towards the
-  // norm
-  double result = 0.0;
-
-  for(unsigned int i=0; i<At->ncol; i++)
-  {
-    double dotproduct = 0.0;
-    for(unsigned int j=P(At, i); j<P(At, i+1); j++)
-    {
-      int row = I(At, j);
-      dotproduct += x[row] * X(At, j);
-    }
-    result += dotproduct * dotproduct;
-  }
-
-  return result;
-}
-
-
 
 static void computeCauchyUpdate(operatingPoint_t* point)
 {
