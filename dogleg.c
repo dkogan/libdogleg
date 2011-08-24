@@ -4,27 +4,31 @@
 #include <malloc.h>
 #include "dogleg.h"
 
-//#define DOGLEG_DEBUG
-
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
-
-#define MAX_ITERATIONS 100
-#define TRUSTREGION0   1.0
-
-#define TRUSTREGION_DECREASE_FACTOR    0.1
-#define TRUSTREGION_INCREASE_FACTOR    2
-#define TRUSTREGION_INCREASE_THRESHOLD 0.75
-#define TRUSTREGION_DECREASE_THRESHOLD 0.25
-
-#define JT_X_THRESHOLD           1e-10
-#define UPDATE_THRESHOLD         1e-10
-#define TRUSTREGION_THRESHOLD    1e-10
 
 // used to consolidate the casts
 #define P(A, index) ((unsigned int*)((A)->p))[index]
 #define I(A, index) ((unsigned int*)((A)->i))[index]
 #define X(A, index) ((double*      )((A)->x))[index]
+
+
+// These are the optimizer parameters
+static int DOGLEG_DEBUG = 0;
+
+static int    MAX_ITERATIONS = 100;
+static double TRUSTREGION0 =   1.0;
+
+static double TRUSTREGION_DECREASE_FACTOR    = 0.1;
+static double TRUSTREGION_INCREASE_FACTOR    = 2;
+static double TRUSTREGION_INCREASE_THRESHOLD = 0.75;
+static double TRUSTREGION_DECREASE_THRESHOLD = 0.25;
+
+static double JT_X_THRESHOLD        = 1e-10;
+static double UPDATE_THRESHOLD      = 1e-10;
+static double TRUSTREGION_THRESHOLD = 1e-10;
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // routines for gradient testing
@@ -258,9 +262,8 @@ static void computeCauchyUpdate(operatingPoint_t* point)
   vec_copy_scaled(point->updateCauchy,
                   point->Jt_x, k, point->Jt->nrow);
 
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "cauchy step size %f\n", sqrt(point->updateCauchy_lensq));
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "cauchy step size %f\n", sqrt(point->updateCauchy_lensq));
 }
 
 static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* ctx)
@@ -301,9 +304,8 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
 
   point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x,
                                 point->Jt->nrow);
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "gn step size %f\n", sqrt(point->updateGN_lensq));
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "gn step size %f\n", sqrt(point->updateGN_lensq));
 }
 
 static void computeInterpolatedUpdate(double* update_dogleg,
@@ -346,10 +348,11 @@ static void computeInterpolatedUpdate(double* update_dogleg,
   // to
   vec_interpolate(update_dogleg, a, -k, a_minus_b, point->Jt->nrow);
 
-#ifdef DOGLEG_DEBUG
-  double updateNorm = norm2(update_dogleg, point->Jt->nrow);
-  fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
-#endif
+  if( DOGLEG_DEBUG )
+  {
+    double updateNorm = norm2(update_dogleg, point->Jt->nrow);
+    fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
+  }
 }
 
 // takes in point->p, and computes all the quantities derived from it, storing
@@ -376,9 +379,9 @@ static int computeCallbackOperatingPoint(operatingPoint_t* point, solverContext_
   for(unsigned int i=0; i<point->Jt->nrow; i++)
     if(fabs(point->Jt_x[i]) > JT_X_THRESHOLD)
       return 0;
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "Jt_x all below the threshold. Done iterating!\n");
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "Jt_x all below the threshold. Done iterating!\n");
+
   return 1;
 }
 static double computeExpectedImprovement(const double* step, const operatingPoint_t* point)
@@ -398,9 +401,8 @@ static double computeExpectedImprovement(const double* step, const operatingPoin
 static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
                            double trustregion, solverContext_t* ctx)
 {
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "taking step with trustregion %f\n", trustregion);
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "taking step with trustregion %f\n", trustregion);
 
   double update_array[pointFrom->Jt->nrow];
   double* update;
@@ -410,9 +412,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 
   if(pointFrom->updateCauchy_lensq >= trustregion*trustregion)
   {
-#ifdef DOGLEG_DEBUG
-    fprintf(stderr, "taking cauchy step\n");
-#endif
+    if( DOGLEG_DEBUG )
+      fprintf(stderr, "taking cauchy step\n");
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
@@ -434,9 +435,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     computeGaussNewtonUpdate(pointFrom, ctx);
     if(pointFrom->updateGN_lensq <= trustregion*trustregion)
     {
-#ifdef DOGLEG_DEBUG
-      fprintf(stderr, "taking GN step\n");
-#endif
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "taking GN step\n");
 
       // full Gauss-Newton step lies within my trust region. Take the full step
       update = pointFrom->updateGN_cholmoddense->x;
@@ -444,9 +444,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     }
     else
     {
-#ifdef DOGLEG_DEBUG
-      fprintf(stderr, "taking interpolated step\n");
-#endif
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "taking interpolated step\n");
 
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
@@ -471,9 +470,9 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
     if( fabs(update[i]) > UPDATE_THRESHOLD*ctx->p_max[i])
       return expectedImprovement;
 
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "update small enough. Done iterating!\n");
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "update small enough. Done iterating!\n");
+
   return -1.0;
 }
 
@@ -488,9 +487,9 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
 
-#ifdef DOGLEG_DEBUG
-  fprintf(stderr, "expected improvement: %f, got improvement %f\n", expectedImprovement, observedImprovement);
-#endif
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "expected improvement: %f, got improvement %f\n", expectedImprovement, observedImprovement);
+
 
   double rho = observedImprovement / expectedImprovement;
   if(rho < TRUSTREGION_DECREASE_THRESHOLD)
@@ -513,16 +512,16 @@ static void runOptimizer(solverContext_t* ctx)
   int stepCount;
   for(stepCount=0; stepCount<MAX_ITERATIONS; stepCount++)
   {
-#ifdef DOGLEG_DEBUG
-    fprintf(stderr, "step %d\n", stepCount);
-    fprintf(stderr, "\n\n\n");
-#endif
+    if( DOGLEG_DEBUG )
+    {
+      fprintf(stderr, "step %d\n", stepCount);
+      fprintf(stderr, "\n\n\n");
+    }
 
     while(1)
     {
-#ifdef DOGLEG_DEBUG
-      fprintf(stderr, "\n\n");
-#endif
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "\n\n");
 
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
@@ -536,9 +535,9 @@ static void runOptimizer(solverContext_t* ctx)
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
       {
-#ifdef DOGLEG_DEBUG
-        fprintf(stderr, "accepted step\n");
-#endif
+        if( DOGLEG_DEBUG )
+          fprintf(stderr, "accepted step\n");
+
         // I accept this step, so the after-step operating point is the before-step operating point
         // of the next iteration. I exchange the before- and after-step structures so that all the
         // pointers are still around and I don't have to re-allocate
@@ -549,9 +548,9 @@ static void runOptimizer(solverContext_t* ctx)
 
         if( afterStepZeroGradient )
         {
-#ifdef DOGLEG_DEBUG
-          fprintf(stderr, "Gradient low enough and we just improved. Done iterating!");
-#endif
+          if( DOGLEG_DEBUG )
+            fprintf(stderr, "Gradient low enough and we just improved. Done iterating!");
+
           return;
         }
 
@@ -562,17 +561,16 @@ static void runOptimizer(solverContext_t* ctx)
         break;
       }
 
-#ifdef DOGLEG_DEBUG
-      fprintf(stderr, "rejected step\n");
-#endif
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "rejected step\n");
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
       if(TRUSTREGION_THRESHOLD*norm2(ctx->p_max, ctx->beforeStep->Jt->nrow) > trustregion*trustregion)
       {
-#ifdef DOGLEG_DEBUG
-        fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
-#endif
+        if( DOGLEG_DEBUG )
+          fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
+
         return;
       }
 
@@ -580,10 +578,8 @@ static void runOptimizer(solverContext_t* ctx)
     }
   }
 
-#ifdef DOGLEG_DEBUG
-  if(stepCount == MAX_ITERATIONS)
-    fprintf(stderr, "Exceeded max number of iterations\n");
-#endif
+  if( DOGLEG_DEBUG && stepCount == MAX_ITERATIONS)
+      fprintf(stderr, "Exceeded max number of iterations\n");
 }
 
 static operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
