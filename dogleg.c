@@ -13,6 +13,9 @@
 #define X(A, index) ((double*      )((A)->x))[index]
 
 
+//////////////////////////////////////////////////////////////////////////////////////////
+// parameter sutff
+//////////////////////////////////////////////////////////////////////////////////////////
 // These are the optimizer parameters. They have semi-arbitrary defaults. The
 // user should adjust them through the API
 static int DOGLEG_DEBUG = 0;
@@ -29,6 +32,35 @@ static double JT_X_THRESHOLD        = 1e-10;
 static double UPDATE_THRESHOLD      = 1e-10;
 static double TRUSTREGION_THRESHOLD = 1e-10;
 
+// these parameters likely should be messed with
+void dogleg_setDebug(int debug)
+{
+  DOGLEG_DEBUG = debug;
+}
+void dogleg_setInitialTrustregion(double t)
+{
+  TRUSTREGION0 = t;
+}
+void dogleg_setThresholds(double Jt_x, double update, double trustregion)
+{
+  if(Jt_x > 0.0)        JT_X_THRESHOLD        = Jt_x;
+  if(update > 0.0)      UPDATE_THRESHOLD      = update;
+  if(trustregion > 0.0) TRUSTREGION_THRESHOLD = trustregion;
+}
+
+// these parameters likely should not be messed with.
+void dogleg_setMaxIterations(int n)
+{
+  MAX_ITERATIONS = n;
+}
+void dogleg_setTrustregionUpdateParameters(double downFactor, double downThreshold,
+                                           double upFactor,   double upThreshold)
+{
+  TRUSTREGION_DECREASE_FACTOR    = downFactor;
+  TRUSTREGION_DECREASE_THRESHOLD = downThreshold;
+  TRUSTREGION_INCREASE_FACTOR    = upFactor;
+  TRUSTREGION_INCREASE_THRESHOLD = upThreshold;
+}
 
 
 
