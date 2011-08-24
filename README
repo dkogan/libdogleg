@@ -19,9 +19,6 @@ GPL-ed). This is all manageable, though
 
 Areas to improve
 
-The trust region at the start is hard-coded to 1.0. This means the initial iterations don't make any
-optimization progress, but rather act to find a resonable trust region.
-
 The current implementation chokes if JtJ is singular. This happens if at a particular operating
 point the vector x has no dependence at all on some elements of p. 
 

@@ -18,6 +18,10 @@ void dogleg_testGradient(unsigned int var, const double* p0,
 
 // these parameters likely should be messed with
 void dogleg_setDebug(int debug);
+
+// The size of the trust region at start. It is cheap to reject a too-large
+// trust region, so this should be something "large". Say 10x a "normal" step
+// size
 void dogleg_setInitialTrustregion(double t);
 void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 
