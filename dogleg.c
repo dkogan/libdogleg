@@ -27,6 +27,8 @@ static int MAX_ITERATIONS = 100;
 // the API
 static double TRUSTREGION0 = 1.0e3;
 
+// These are probably OK to leave alone. Tweaking them can maybe result in
+// slightly faster convergence
 static double TRUSTREGION_DECREASE_FACTOR    = 0.1;
 static double TRUSTREGION_INCREASE_FACTOR    = 2;
 static double TRUSTREGION_INCREASE_THRESHOLD = 0.75;
