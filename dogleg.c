@@ -266,10 +266,6 @@ typedef struct
   operatingPoint_t* beforeStep;
   operatingPoint_t* afterStep;
   cholmod_factor*   factorization;
-
-  // maxium fabs(p) value seen throughout the iteration. These are used to
-  // find a good scale for the termination conditions
-  double*           p_max;
 } solverContext_t;
 
 static void computeCauchyUpdate(operatingPoint_t* point)
@@ -507,7 +503,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   // relative ratios fall below a threshold, I call myself done
   unsigned int i;
   for(i=0; i<pointFrom->Jt->nrow; i++)
-    if( fabs(update[i]) > UPDATE_THRESHOLD*ctx->p_max[i])
+    if( fabs(update[i]) > UPDATE_THRESHOLD )
       return expectedImprovement;
 
   if( DOGLEG_DEBUG )
@@ -594,10 +590,6 @@ static void runOptimizer(solverContext_t* ctx)
           return;
         }
 
-        // I now update p_max
-        for(unsigned int i=0; i<ctx->beforeStep->Jt->nrow; i++)
-          ctx->p_max[i] = fmax( fabs(ctx->beforeStep->p[i]), ctx->p_max[i] );
-
         break;
       }
 
@@ -606,7 +598,7 @@ static void runOptimizer(solverContext_t* ctx)
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
-      if(TRUSTREGION_THRESHOLD*norm2(ctx->p_max, ctx->beforeStep->Jt->nrow) > trustregion*trustregion)
+      if(trustregion*trustregion < TRUSTREGION_THRESHOLD)
       {
         if( DOGLEG_DEBUG )
           fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
@@ -704,11 +696,6 @@ double dogleg_optimize(double* p, unsigned int Nstate,
 
   memcpy(ctx.beforeStep->p, p, Nstate * sizeof(double));
 
-  ctx.p_max = malloc(Nstate * sizeof(double));
-  ASSERT(ctx.p_max != NULL);
-  for(unsigned int i=0; i<Nstate; i++)
-    ctx.p_max[i] = fabs(p[i]);
-
   // everything is set up, so run the solver!
   runOptimizer(&ctx);
 
@@ -722,8 +709,6 @@ double dogleg_optimize(double* p, unsigned int Nstate,
   if(ctx.factorization != NULL)
     cholmod_free_factor (&ctx.factorization, &ctx.common);
   cholmod_finish(&ctx.common);
-
-  free(ctx.p_max);
 
   fprintf(stderr, "success! took %d iterations\n", 10);
   return 10.0; // rms
