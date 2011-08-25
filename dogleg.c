@@ -18,14 +18,14 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 // These are the optimizer parameters. They have semi-arbitrary defaults. The
 // user should adjust them through the API
-static int DOGLEG_DEBUG = 0;
+static int DOGLEG_DEBUG   = 0;
+static int MAX_ITERATIONS = 100;
 
-static int    MAX_ITERATIONS = 100;
 // it is cheap to reject a too-large trust region, so I start with something
 // "large". The solver will quickly move down to something reasonable. Only the
 // user really knows if this is "large" or not, so they should change this via
 // the API
-static double TRUSTREGION0 =   1.0e3;
+static double TRUSTREGION0 = 1.0e3;
 
 static double TRUSTREGION_DECREASE_FACTOR    = 0.1;
 static double TRUSTREGION_INCREASE_FACTOR    = 2;
