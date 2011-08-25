@@ -501,9 +501,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
   vec_add(newp, pointFrom->p, update, pointFrom->Jt->nrow);
   double expectedImprovement = computeExpectedImprovement(update, pointFrom);
 
-  // are we done? For each state variable I look at the relative update step
-  // in respect to the max value of that variable seen so far. If all the
-  // relative ratios fall below a threshold, I call myself done
+  // are we done? For each state variable I look at the update step. If all the elements fall below
+  // a threshold, I call myself done
   unsigned int i;
   for(i=0; i<pointFrom->Jt->nrow; i++)
     if( fabs(update[i]) > UPDATE_THRESHOLD )
