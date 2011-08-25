@@ -601,7 +601,7 @@ static void runOptimizer(solverContext_t* ctx)
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
-      if(trustregion*trustregion < TRUSTREGION_THRESHOLD)
+      if(trustregion < TRUSTREGION_THRESHOLD)
       {
         if( DOGLEG_DEBUG )
           fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
