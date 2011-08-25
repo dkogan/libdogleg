@@ -34,9 +34,10 @@ static double TRUSTREGION_INCREASE_FACTOR    = 2;
 static double TRUSTREGION_INCREASE_THRESHOLD = 0.75;
 static double TRUSTREGION_DECREASE_THRESHOLD = 0.25;
 
-static double JT_X_THRESHOLD        = 1e-10;
-static double UPDATE_THRESHOLD      = 1e-10;
-static double TRUSTREGION_THRESHOLD = 1e-10;
+// The termination thresholds. Documented in the header
+static double JT_X_THRESHOLD        = 1e-8;
+static double UPDATE_THRESHOLD      = 1e-8;
+static double TRUSTREGION_THRESHOLD = 1e-8;
 
 // these parameters likely should be messed with
 void dogleg_setDebug(int debug)
