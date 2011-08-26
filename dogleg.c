@@ -702,7 +702,7 @@ double dogleg_optimize(double* p, unsigned int Nstate,
 
   // everything is set up, so run the solver!
   int    numsteps = runOptimizer(&ctx);
-  double rms      = sqrt( ctx.beforeStep->norm2_x / Nstate );
+  double norm2_x  = ctx.beforeStep->norm2_x;
 
   // runOptimizer places the most recent results into beforeStep in preparation for another
   // iteration
@@ -716,5 +716,5 @@ double dogleg_optimize(double* p, unsigned int Nstate,
   cholmod_finish(&ctx.common);
 
   fprintf(stderr, "success! took %d iterations\n", numsteps);
-  return rms;
+  return norm2_x;
 }
