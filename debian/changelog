@@ -1,10 +1,12 @@
-libdogleg (0.01-2~1.gbp99bf04) UNRELEASED; urgency=low
-
-  ** SNAPSHOT build @99bf04372498097e5f4d9c88f382909e0fdd0234 **
+libdogleg (0.02-1) unstable; urgency=low
 
   * libdogleg now reports the sovler rms and the iteration count
+  * version bump
+  * all debug output now reports more precision
+  * debug output now contains rho
+  * I now return the 2-norm of the optimal error vector. I no longer try to compute the RMS since I don't know what the inputs I'm passed in mean
 
- -- Dima Kogan <dima@fatty.local>  Fri, 26 Aug 2011 13:27:08 -0700
+ -- Dima Kogan <dima@fatty.local>  Fri, 26 Aug 2011 15:18:47 -0700
 
 libdogleg (0.01-1) unstable; urgency=low
 
