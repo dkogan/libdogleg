@@ -525,11 +525,11 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
 
-  if( DOGLEG_DEBUG )
-    fprintf(stderr, "expected improvement: %.20f, got improvement %.20f\n", expectedImprovement, observedImprovement);
-
-
   double rho = observedImprovement / expectedImprovement;
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "expected improvement: %.20f, got improvement %.20f. rho = %.20f\n",
+            expectedImprovement, observedImprovement, rho);
+
   if(rho < TRUSTREGION_DECREASE_THRESHOLD)
     *trustregion *= TRUSTREGION_DECREASE_FACTOR;
   else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
