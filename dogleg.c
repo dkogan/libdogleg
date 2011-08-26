@@ -540,14 +540,14 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
   return rho > 0.0;
 }
 
-static void runOptimizer(solverContext_t* ctx)
+static int runOptimizer(solverContext_t* ctx)
 {
   double trustregion = TRUSTREGION0;
+  int stepCount = 0;
 
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
-    return;
+    return stepCount;
 
-  int stepCount;
   for(stepCount=0; stepCount<MAX_ITERATIONS; stepCount++)
   {
     if( DOGLEG_DEBUG )
@@ -566,7 +566,7 @@ static void runOptimizer(solverContext_t* ctx)
 
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
-        return;
+        return stepCount;
 
       double afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
 
@@ -589,7 +589,7 @@ static void runOptimizer(solverContext_t* ctx)
           if( DOGLEG_DEBUG )
             fprintf(stderr, "Gradient low enough and we just improved. Done iterating!");
 
-          return;
+          return stepCount;
         }
 
         break;
@@ -605,7 +605,7 @@ static void runOptimizer(solverContext_t* ctx)
         if( DOGLEG_DEBUG )
           fprintf(stderr, "trust region small enough. Giving up. Done iterating!\n");
 
-        return;
+        return stepCount;
       }
 
       // I have rejected this step, so I try again with the new trust region
@@ -614,6 +614,8 @@ static void runOptimizer(solverContext_t* ctx)
 
   if( DOGLEG_DEBUG && stepCount == MAX_ITERATIONS)
       fprintf(stderr, "Exceeded max number of iterations\n");
+
+  return stepCount;
 }
 
 static operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
@@ -699,7 +701,8 @@ double dogleg_optimize(double* p, unsigned int Nstate,
   memcpy(ctx.beforeStep->p, p, Nstate * sizeof(double));
 
   // everything is set up, so run the solver!
-  runOptimizer(&ctx);
+  int    numsteps = runOptimizer(&ctx);
+  double rms      = sqrt( ctx.beforeStep->norm2_x / Nstate );
 
   // runOptimizer places the most recent results into beforeStep in preparation for another
   // iteration
@@ -712,6 +715,6 @@ double dogleg_optimize(double* p, unsigned int Nstate,
     cholmod_free_factor (&ctx.factorization, &ctx.common);
   cholmod_finish(&ctx.common);
 
-  fprintf(stderr, "success! took %d iterations\n", 10);
-  return 10.0; // rms
+  fprintf(stderr, "success! took %d iterations\n", numsteps);
+  return rms;
 }
