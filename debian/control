@@ -1,6 +1,6 @@
 Source: libdogleg
 Priority: extra
-Maintainer: Dima Kogan <dima@unknown>
+Maintainer: Dima Kogan <dima@oblong.com>
 Build-Depends: debhelper (>= 8.0.0), libsuitesparse-dev | libsuitesparse-metis-dev
 Standards-Version: 3.9.2
 Section: libs
