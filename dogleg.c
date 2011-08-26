@@ -220,12 +220,12 @@ void dogleg_testGradient(unsigned int var, const double* p0,
     if(isnan(gRep))
     {
       if( gObs != 0 )
-        printf("var,meas %d,%d: no reported gradient, but observed %f\n", var, i, gObs);
+        printf("var,meas %d,%d: no reported gradient, but observed %.20f\n", var, i, gObs);
 
       continue;
     }
 
-    printf("var,meas %d,%d: reported: %f, observed: %f, err: %f, relativeerr: %f\n", var, i,
+    printf("var,meas %d,%d: reported: %.20f, observed: %.20f, err: %.20f, relativeerr: %.20f\n", var, i,
            gRep, gObs, fabs(gRep - gObs), fabs(gRep - gObs) / ( (fabs(gRep) + fabs(gObs)) / 2.0 ) );
   }
 
@@ -302,7 +302,7 @@ static void computeCauchyUpdate(operatingPoint_t* point)
                   point->Jt_x, k, point->Jt->nrow);
 
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "cauchy step size %f\n", sqrt(point->updateCauchy_lensq));
+    fprintf(stderr, "cauchy step size %.20f\n", sqrt(point->updateCauchy_lensq));
 }
 
 static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* ctx)
@@ -344,7 +344,7 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
   point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x,
                                 point->Jt->nrow);
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "gn step size %f\n", sqrt(point->updateGN_lensq));
+    fprintf(stderr, "gn step size %.20f\n", sqrt(point->updateGN_lensq));
 }
 
 static void computeInterpolatedUpdate(double* update_dogleg,
@@ -378,7 +378,7 @@ static void computeInterpolatedUpdate(double* update_dogleg,
   double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
   if(discriminant < 0.0)
   {
-    fprintf(stderr, "negative discriminant: %f!\n", discriminant);
+    fprintf(stderr, "negative discriminant: %.20f!\n", discriminant);
     discriminant = 0.0;
   }
   double k = (neg_c + sqrt(discriminant))/l2;
@@ -390,7 +390,7 @@ static void computeInterpolatedUpdate(double* update_dogleg,
   if( DOGLEG_DEBUG )
   {
     double updateNorm = norm2(update_dogleg, point->Jt->nrow);
-    fprintf(stderr, "k %f, norm %f\n", k, sqrt(updateNorm));
+    fprintf(stderr, "k %.20f, norm %.20f\n", k, sqrt(updateNorm));
   }
 }
 
@@ -441,7 +441,7 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
                            double trustregion, solverContext_t* ctx)
 {
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "taking step with trustregion %f\n", trustregion);
+    fprintf(stderr, "taking step with trustregion %.20f\n", trustregion);
 
   double update_array[pointFrom->Jt->nrow];
   double* update;
@@ -526,7 +526,7 @@ static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
   double observedImprovement = before->norm2_x - after->norm2_x;
 
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "expected improvement: %f, got improvement %f\n", expectedImprovement, observedImprovement);
+    fprintf(stderr, "expected improvement: %.20f, got improvement %.20f\n", expectedImprovement, observedImprovement);
 
 
   double rho = observedImprovement / expectedImprovement;
