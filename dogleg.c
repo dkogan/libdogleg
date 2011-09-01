@@ -336,8 +336,8 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
     cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
   
   point->updateGN_cholmoddense = cholmod_solve(0, ctx->factorization,
-                                         &Jt_x_dense,
-                                         &ctx->common);
+                                               &Jt_x_dense,
+                                               &ctx->common);
   vec_negate(point->updateGN_cholmoddense->x,
              point->Jt->nrow); // should be more efficient than this later
 
