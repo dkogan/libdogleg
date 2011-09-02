@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <math.h>
 #include <string.h>
 #include <malloc.h>
@@ -697,11 +698,25 @@ static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
   *point = NULL;
 }
 
+static int cholmod_error_callback(const char* s, ...)
+{
+  va_list ap;
+  va_start(ap, s);
+  int ret = vfprintf(stderr, s, ap);
+  va_end(ap);
+
+  return ret;
+}
+
 static void set_cholmod_options(cholmod_common* common)
 {
   // I want to use LGPL parts of CHOLMOD only, so I turn off the supernodal routines. This gave me a
   // 25% performance hit in the solver for a particular set of optical calibration data.
   common->supernodal = 0;
+
+
+  // I want all output to go to STDERR, not STDOUT
+  common->print_function = cholmod_error_callback;
 }
 
 double dogleg_optimize(double* p, unsigned int Nstate,
