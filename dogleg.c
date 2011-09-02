@@ -39,6 +39,9 @@ static double JT_X_THRESHOLD        = 1e-8;
 static double UPDATE_THRESHOLD      = 1e-8;
 static double TRUSTREGION_THRESHOLD = 1e-8;
 
+// if I ever see a singular JtJ, I factor JtJ + LAMBDA*I from that point on
+#define LAMBDA 1e-20
+
 // these parameters likely should be messed with
 void dogleg_setDebug(int debug)
 {
@@ -269,6 +272,11 @@ typedef struct
   operatingPoint_t* beforeStep;
   operatingPoint_t* afterStep;
   cholmod_factor*   factorization;
+
+  // Have I ever seen a singular JtJ? If so, I add a small constant to the
+  // diagonal from that point on. This is a simple and fast way to deal with
+  // singularities. This is suboptimal but works for me for now.
+  int               wasPositiveSemidefinite;
 } solverContext_t;
 
 static void computeCauchyUpdate(operatingPoint_t* point)
@@ -320,8 +328,22 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
     ASSERT(ctx->factorization != NULL);
   }
 
-  ASSERT( cholmod_factorize(point->Jt,
-                            ctx->factorization, &ctx->common) );
+  // try to factorize the matrix directly. If it's singular, add a small
+  // constant to the diagonal from this point on
+  if(!ctx->wasPositiveSemidefinite)
+  {
+    ASSERT( cholmod_factorize(point->Jt, ctx->factorization, &ctx->common) );
+    if(ctx->factorization->minor != ctx->factorization->n)
+    {
+      ctx->wasPositiveSemidefinite = 1;
+    }
+  }
+  if(ctx->wasPositiveSemidefinite)
+  {
+    double beta[] = {LAMBDA, 0};
+    ASSERT( cholmod_factorize_p(point->Jt, beta, NULL, 0,
+                                ctx->factorization, &ctx->common) );
+  }
 
   // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
   cholmod_dense Jt_x_dense = {.nrow  = point->Jt->nrow,
@@ -684,9 +706,10 @@ double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
                        dogleg_callback_t* f, void* cookie)
 {
-  solverContext_t ctx = {.f             = f,
-                         .cookie        = cookie,
-                         .factorization = NULL};
+  solverContext_t ctx = {.f                       = f,
+                         .cookie                  = cookie,
+                         .factorization           = NULL,
+                         .wasPositiveSemidefinite = 0};
 
   if( !cholmod_start(&ctx.common) )
   {
