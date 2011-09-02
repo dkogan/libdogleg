@@ -336,6 +336,8 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
     if(ctx->factorization->minor != ctx->factorization->n)
     {
       ctx->wasPositiveSemidefinite = 1;
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "singular JtJ. Adding %g I from now on\n", LAMBDA);
     }
   }
   if(ctx->wasPositiveSemidefinite)
