@@ -1,3 +1,11 @@
+libdogleg (0.03-1) unstable; urgency=low
+
+  * un-hardcoded the problem I'm asking CHOLMOD to solve
+  * If I ever see a singular JtJ, I factor JtJ + LAMBDA*I from that point on. This is a quick/dirty way to handle singular JtJ matrices
+  * CHOLMOD messages now go to stderr, not stdout
+
+ -- Dima Kogan <dima@fatty.local>  Fri, 02 Sep 2011 17:36:25 -0700
+
 libdogleg (0.02-1) unstable; urgency=low
 
   * libdogleg now reports the sovler rms and the iteration count
