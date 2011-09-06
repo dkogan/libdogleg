@@ -1,0 +1,258 @@
+=head1 OVERVIEW
+
+This is a general purpose sparse optimizer to solve data fitting problems. A common use case is
+sparse bundle adjustment.
+
+=head1 DESCRIPTION
+
+This is a library for solving large-scale nonlinear optimization problems. By employing sparse
+linear algebra, it is taylored for problems that have weak coupling between the optimization
+variables. For appropriately sparse problems this results in I<massive> performance gains.
+
+The main task of this library is to find the vector B<p> that minimizes
+
+norm2( B<x> )
+
+where B<x> = I<f>(B<p>) is a vector that has higher dimensionality than B<p>. The user passes in a
+callback function (of type C<dogleg_callback_t>) that takes in the vector B<p> and returns the
+vector B<x> and a matrix of derivatives B<J> = dB<f>/dB<p>. B<J> is a matrix with a row for each element
+of I<f> and a column for each element of B<p>. B<J> is a sparse matrix, which results in substantial
+increases in computational efficiency if most entries of B<J> are 0. B<J> is stored row-first in the
+callback routine. libdogleg uses a column-first data representation so it references the transpose
+of B<J> (called B<Jt>). B<J> stored row-first is identical to B<Jt> stored column-first; this is purely a
+naming choice.
+
+This library implements Powell's dog-leg algorithm to solve the problem. Like the more-widely-known
+Levenberg-Marquardt algorithm, Powell's dog-leg algorithm solves a nonlinear optimization problem by
+interpolating between a Gauss-Newton step and a gradient descent step. Improvements over LM are
+
+=over
+
+=item * a more natural representation of the linearity of the operating point (trust region size vs
+a vague lambda term).
+
+=item * significant efficiency gains, since a matrix inversion isn't needed to retry a rejected step
+
+=back
+
+The algorithm is described in many places, originally in
+
+M. Powell. A Hybrid Method for Nonlinear Equations. In P. Rabinowitz, editor, Numerical Methods for
+Nonlinear Algebraic Equations, pages 87-144.  Gordon and Breach Science, London, 1970.
+
+Various enhancements to Powell's original method are described in the literature; at this time only
+the original algorithm is implemented here. 
+
+The sparse matrix algebra is handled by the CHOLMOD library, written by Tim Davis. Parts of CHOLMOD
+are licensed under the GPL and parts under the LGPL. Only the LGPL pieces are used here, allowing
+libdogleg to be licensed under the LGPL as well. Due to this I lose some convenience (all simple
+sparse matrix arithmetic in CHOLMOD is GPL-ed) and some performance (the fancier computational
+methods, such as supernodal analysis are GPL-ed). For my current applications the performance losses
+are minor.
+
+
+=head1 FUNCTIONS AND TYPES
+
+=head2 Main API
+
+=head3 dogleg_optimize
+
+This is the main call to the library. Its declared as
+
+ double dogleg_optimize(double* p, unsigned int Nstate,
+                        unsigned int Nmeas, unsigned int NJnnz,
+                        dogleg_callback_t* f, void* cookie);
+
+=over
+
+=item * B<p> is the initial estimate of the state vector (and holds the final result)
+
+=item * C<Nstate> specifies the number of optimization variables (elements of B<p>)
+
+=item * C<Nmeas> specifies the number of measurements (elements of B<x>). C<Nmeas E<gt>= Nstate> is a
+requirement
+
+=item * C<NJnnz> specifies the number of non-zero elements of the jacobian matrix dB<f>/dB<p>. In a
+dense matrix C<Jnnz = Nstate*Nmeas>. We are dealing with sparse jacobians, so C<NJnnz> should be far
+less. If not, libdogleg is not an appropriate routine to solve this problem.
+
+=item * C<f> specifies the callback function that the optimization routine calls to sample the problem
+being solved
+
+=item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
+
+=back
+
+C<dogleg_optimize> returns norm2( B<x> ) at the minimum, or a negative value if an error occurred.
+
+=head3 dogleg_callback_t
+
+The main user callback that specifies the optimization problem has type
+
+ typedef void (dogleg_callback_t)(const double*   p,
+                                  double*         x,
+                                  cholmod_sparse* Jt,
+                                  void*           cookie);
+
+=over
+
+=item * B<p> is the current state vector
+
+=item * B<x> is the resulting I<f>(B<p>)
+
+=item * B<Jt> is the transpose of dB<f>/dB<p> at B<p>. As mentioned previously, B<Jt> is stored
+column-first by CHOLMOD, which can be interpreted as storing B<J> row-first by the user-defined
+callback routine
+
+=item * The C<cookie> is the user-defined arbitrary data passed into C<dogleg_optimize>.
+
+=back
+
+=head3 dogleg_testGradient
+
+libdogleg requires the user to compute the jacobian matrix B<J>. This is a performance optimization,
+since B<J> could be computed by differences of B<x>. This optimization is often worth the extra
+effort, but it creates a possibility that B<J> will have a mistake and B<J> = dB<f>/dB<p> would not
+be true. To find these types of issues, the user can call
+
+ void dogleg_testGradient(unsigned int var, const double* p0,
+                          unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
+                          dogleg_callback_t* f, void* cookie);
+
+This function computes the jacobian with center differences and compares the result with the
+jacobian computed by the callback function. It is recommended to do this for every variable while
+developing the program that uses libdogleg.
+
+=over
+
+=item * C<var> is the index of the variable being tested
+
+=item * C<p0> is the state vector B<p> where we're evaluating the jacobian
+
+=item * C<Nstate>, C<Nmeas>, C<NJnnz> are the number of state variables, measurements and non-zero jacobian elements, as before
+
+=item * C<f> is the callback function, as before
+
+=item * C<cookie> is the user data, as before
+
+=back
+
+This function returns nothing, but prints out the test results.
+
+
+=head2 Parameters
+
+It is not required to call any of these, but it's highly recommended to set the initial trust-region
+size and the termination thresholds to match the problem being solved. Furthermore, it's highly
+recommended for the problem being solved to be scaled so that every state variable affects the
+objective norm2( B<x> ) equally. This makes this method's concept of "trust region" much more
+well-defined and makes the termination criteria work correctly.
+
+=head3 dogleg_setMaxIterations
+
+To set the maximum number of solver iterations, call
+
+ void dogleg_setMaxIterations(int n);
+
+=head3 dogleg_setDebug
+
+To turn on debug output, call
+
+ void dogleg_setDebug(int debug);
+
+with a non-zero value for C<debug>. By default, debug output is disabled.
+
+=head3 dogleg_setInitialTrustregion
+
+The optimization method keeps track of a trust region size. Here, the trust region is a ball in
+R^Nstate. When the method takes a step B<p> -> B<p + delta_p>, it makes sure that
+
+S<sqrt( norm2( B<delta_p> ) ) < trust region size>.
+
+The initial value of the trust region size can be set with
+
+ void dogleg_setInitialTrustregion(double t);
+
+The dogleg algorithm is efficient when recomputing a rejected step for a smaller trust region, so
+set the initial trust region size to a value larger to a reasonable estimate; the method will
+quickly shrink the trust region to the correct size.
+
+=head3 dogleg_setThresholds
+
+The routine exits when the maximum number of iterations is exceeded, or a termination threshold is
+hit, whichever happens first. The termination thresholds are all designed to trigger when very slow
+progress is being made. If all went well, this slow progress is due to us finding the optimum. There
+are 3 termination thresholds:
+
+=over
+
+=item * The function being minimized is E = norm2( B<x> ) where B<x> = I<f>(B<p>).
+
+dE/dB<p> = 2*B<Jt>*B<x> where B<Jt> is transpose(dB<x>/dB<p>).
+
+ if( for every i  fabs(Jt_x[i]) < JT_X_THRESHOLD )
+ { we are done; }
+
+=item * The method takes discrete steps: B<p> -> B<p + delta_p>
+
+ if( for every i  fabs(delta_p[i]) < UPDATE_THRESHOLD)
+ { we are done; }
+
+=item * The method dynamically controls the trust region.
+
+ if(trustregion < TRUSTREGION_THRESHOLD)
+ { we are done; }
+
+=back
+
+To set these threholds, call
+
+ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
+
+To leave a particular threshold alone, specify a negative value.
+
+=head3 dogleg_setTrustregionUpdateParameters
+
+This function sets the parameters that control when and how the trust region is updated. The default
+values should work well in most cases, and shouldn't need to be tweaked.
+
+Declaration looks like
+
+ void dogleg_setTrustregionUpdateParameters(double downFactor, double downThreshold,
+                                            double upFactor,   double upThreshold);
+
+To see what the parameters do, look at C<evaluateStep_adjustTrustRegion> in the source. Again, these
+should just work as is.
+
+
+=head1 BUGS
+
+The current implementation doesn't handle a singular B<JtJ> gracefully (B<JtJ> =
+B<Jt> * B<J>). Analytically, B<JtJ> is at worst positive semi-definite (has 0 eigenvalues). If a
+singular B<JtJ> is ever encountered, from that point on, B<JtJ> + lambda*B<I> is inverted instead
+for some positive constant lambda. This makes the matrix strictly positive definite, but is
+sloppy. At least I should vary lambda. In my current applications, a singular B<JtJ> only occurs if
+at a particular operating point the vector B<x> has no dependence at all on some elements of
+B<p>. In the general case other causes could exist, though.
+
+There's an inefficiency in that the callback always returns B<x> and B<J>. When I evaluate and
+reject a step, I do not end up using B<J> at all. Dependng on the callback function, it may be
+better to ask for B<x> and then, if the step is accepted, to ask for B<J>.
+
+=head1 AUTHOR
+
+Dima Kogan, C<< <dima@oblong.com> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright 2011 Oblong Industries
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+Lesser General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+
+The full text of the license is available at L<http://www.gnu.org/licenses>
