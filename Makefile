@@ -11,9 +11,9 @@ LDLIBS += -lm
 
 HEADERS = dogleg.h
 TARGET_SO = libdogleg.so.$(SO_VERSION)
-TARGETS = libdogleg.a $(TARGET_SO)
+LIB_TARGETS = libdogleg.a $(TARGET_SO)
 
-all: $(TARGETS)
+all: $(LIB_TARGETS)
 
 %.a: dogleg.o
 	ar rcvu $@ $^
@@ -27,7 +27,7 @@ all: $(TARGETS)
 ifdef DESTDIR
 install:
 	mkdir -p $(DESTDIR)/usr/lib/
-	install -m 0644 $(TARGETS) $(DESTDIR)/usr/lib/
+	install -m 0644 $(LIB_TARGETS) $(DESTDIR)/usr/lib/
 	cd $(DESTDIR)/usr/lib/ && \
 	ln -fs $(TARGET_SO) libdogleg.so.1 && \
 	ln -fs $(TARGET_SO) libdogleg.so && \
