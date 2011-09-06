@@ -1,4 +1,11 @@
-SO_VERSION=1.1.1
+API_VERSION = 1
+VERSION := $(shell dpkg-parsechangelog | awk '/^Version/{ gsub("-.*","",$$2); print $$2}')
+
+ifeq ($(strip $(VERSION)),)
+$(error "Couldn't parse version from debian/changelog")
+endif
+
+SO_VERSION=$(API_VERSION).$(VERSION)
 
 OPTFLAGS = -O3 -ffast-math -mtune=core2
 FLAGS += -ggdb  -Wall -Wextra -MMD $(OPTFLAGS) -I/usr/include/suitesparse
@@ -24,20 +31,20 @@ all: $(ALL_TARGETS)
 	ar rcvu $@ $^
 
 %.so.$(SO_VERSION): dogleg-pic.o
-	$(CC) $(LDLIBS) -shared  $^ -Wl,-soname -Wl,libdogleg.so.1 -o $@
+	$(CC) $(LDLIBS) -shared  $^ -Wl,-soname -Wl,libdogleg.so.$(API_VERSION) -o $@
 
 %-pic.o: %.c
 	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
 
 $(MAN_TARGET): README.pod
-	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release=libdogleg --section=$(MAN_SECTION) $^ $@
+	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release="libdogleg $(VERSION)" --section=$(MAN_SECTION) $^ $@
 
 ifdef DESTDIR
 install:
 	mkdir -p $(DESTDIR)/usr/lib/
 	install -m 0644 $(LIB_TARGETS) $(DESTDIR)/usr/lib/
 	cd $(DESTDIR)/usr/lib/ && \
-	ln -fs $(TARGET_SO) libdogleg.so.1 && \
+	ln -fs $(TARGET_SO) libdogleg.so.$(API_VERSION) && \
 	ln -fs $(TARGET_SO) libdogleg.so && \
 	cd -
 	mkdir -p $(DESTDIR)/usr/include/
