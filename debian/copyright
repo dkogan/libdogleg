@@ -1,11 +1,11 @@
 Format: http://dep.debian.net/deps/dep5
 Upstream-Name: libdogleg
-Source: <https://git.oblong.com/cgit.cgi/libdogleg/>
+Source: <https://github.com/Oblong/libdogleg>
 
 Files: *
 Copyright: 2011 Oblong Industries
 
-License: Oblong proprietary
+License: GNU LGPL
 
 # If you want to use GPL v2 or later for the /debian/* files use 
 # the following clauses, or change it to suit. Delete these two lines
