@@ -1,4 +1,9 @@
 API_VERSION = 1
+
+# I parse the version from debian/changelog. This version is generally something
+# like 0.04-1 Here 0.04 is the main version and 1 is the debian package
+# version. I only use the main version and strip leading 0s, so the above
+# becomes 0.4
 VERSION := $(shell dpkg-parsechangelog | awk '/^Version/{ gsub("-.*","",$$2); print $$2}' | perl -pe 's/\.0*([1-9])/.$$1/g')
 
 ifeq ($(strip $(VERSION)),)
