@@ -202,13 +202,13 @@ void dogleg_testGradient(unsigned int var, const double* p0,
     return;
   }
 
-  cholmod_sparse* Jt  = cholmod_allocate_sparse(Nstate, Nmeas, Jnnz,
+  cholmod_sparse* Jt  = cholmod_allocate_sparse(Nstate, Nmeas, NJnnz,
                                                 1, // sorted
                                                 1, // packed,
                                                 0, // NOT symmetric
                                                 CHOLMOD_REAL,
                                                 &_cholmod_common);
-  cholmod_sparse* Jt0 = cholmod_allocate_sparse(Nstate, Nmeas, Jnnz,
+  cholmod_sparse* Jt0 = cholmod_allocate_sparse(Nstate, Nmeas, NJnnz,
                                                 1, // sorted
                                                 1, // packed,
                                                 0, // NOT symmetric
