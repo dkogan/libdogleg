@@ -12,8 +12,11 @@ LDLIBS += -lm
 HEADERS = dogleg.h
 TARGET_SO = libdogleg.so.$(SO_VERSION)
 LIB_TARGETS = libdogleg.a $(TARGET_SO)
+MAN_TARGET = libdogleg.3
 
-all: $(LIB_TARGETS)
+ALL_TARGETS = $(LIB_TARGETS) $(MAN_TARGET)
+
+all: $(ALL_TARGETS)
 
 %.a: dogleg.o
 	ar rcvu $@ $^
@@ -23,6 +26,9 @@ all: $(LIB_TARGETS)
 
 %-pic.o: %.c
 	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
+
+$(MAN_TARGET): README.pod
+	pod2man $^ $@
 
 ifdef DESTDIR
 install:
@@ -41,7 +47,7 @@ endif
 
 
 clean:
-	rm -f libdogleg.so* *.o *.a *.d
+	rm -f libdogleg.so* *.o *.a *.d $(ALL_TARGETS)
 
 .PHONY: all clean install
 
