@@ -1,3 +1,6 @@
+// Copyright 2011 Oblong Industries
+// License: GNU LGPL <http://www.gnu.org/licenses>.
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <math.h>
