@@ -12,7 +12,9 @@ LDLIBS += -lm
 HEADERS = dogleg.h
 TARGET_SO = libdogleg.so.$(SO_VERSION)
 LIB_TARGETS = libdogleg.a $(TARGET_SO)
-MAN_TARGET = libdogleg.3
+
+MAN_SECTION = 3
+MAN_TARGET = libdogleg.$(MAN_SECTION)
 
 ALL_TARGETS = $(LIB_TARGETS) $(MAN_TARGET)
 
@@ -28,7 +30,7 @@ all: $(ALL_TARGETS)
 	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
 
 $(MAN_TARGET): README.pod
-	pod2man $^ $@
+	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release=libdogleg --section=$(MAN_SECTION) $^ $@
 
 ifdef DESTDIR
 install:
