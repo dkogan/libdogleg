@@ -1,5 +1,5 @@
 API_VERSION = 1
-VERSION := $(shell dpkg-parsechangelog | awk '/^Version/{ gsub("-.*","",$$2); print $$2}')
+VERSION := $(shell dpkg-parsechangelog | awk '/^Version/{ gsub("-.*","",$$2); print $$2}' | perl -pe 's/\.0*([1-9])/.$$1/g')
 
 ifeq ($(strip $(VERSION)),)
 $(error "Couldn't parse version from debian/changelog")
