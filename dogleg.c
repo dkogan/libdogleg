@@ -185,8 +185,8 @@ static double getGrad(unsigned int var, int meas, const cholmod_sparse* Jt)
 }
 
 void dogleg_testGradient(unsigned int var, const double* p0,
-                         unsigned int Nstate, unsigned int Nmeas, unsigned int Jnnz,
-                         dogleg_callback_t* callback, void* cookie)
+                         unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
+                         dogleg_callback_t* f, void* cookie)
 {
   double           x0[Nmeas];
   double           x [Nmeas];
@@ -215,9 +215,9 @@ void dogleg_testGradient(unsigned int var, const double* p0,
                                                 CHOLMOD_REAL,
                                                 &_cholmod_common);
 
-  (*callback)(p, x0, Jt0, cookie);
+  (*f)(p, x0, Jt0, cookie);
   p[var] += GRADTEST_DELTA;
-  (*callback)(p, x,  Jt,  cookie);
+  (*f)(p, x,  Jt,  cookie);
 
   for(unsigned int i=0; i<Nmeas; i++)
   {
@@ -723,7 +723,7 @@ static void set_cholmod_options(cholmod_common* common)
 }
 
 double dogleg_optimize(double* p, unsigned int Nstate,
-                       unsigned int numMeasurements, unsigned int numNonzeroJacobianElements,
+                       unsigned int Nmeas, unsigned int NJnnz,
                        dogleg_callback_t* f, void* cookie)
 {
   solverContext_t ctx = {.f                       = f,
@@ -739,8 +739,8 @@ double dogleg_optimize(double* p, unsigned int Nstate,
 
   set_cholmod_options(&ctx.common);
 
-  ctx.beforeStep = allocOperatingPoint(Nstate, numMeasurements, numNonzeroJacobianElements, &ctx.common);
-  ctx.afterStep  = allocOperatingPoint(Nstate, numMeasurements, numNonzeroJacobianElements, &ctx.common);
+  ctx.beforeStep = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx.common);
+  ctx.afterStep  = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx.common);
 
   memcpy(ctx.beforeStep->p, p, Nstate * sizeof(double));
 
