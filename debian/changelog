@@ -1,3 +1,11 @@
+libdogleg (0.04-1) unstable; urgency=low
+
+  * Re-licensed under the LGPL
+  * better documentation, now in a manpage
+  * all versions tied to debian/changelog
+
+ -- Dima Kogan <dima@fatty.local>  Tue, 06 Sep 2011 14:54:33 -0700
+
 libdogleg (0.03-1) unstable; urgency=low
 
   * un-hardcoded the problem I'm asking CHOLMOD to solve
