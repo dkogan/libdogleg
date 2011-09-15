@@ -45,7 +45,7 @@ $(MAN_TARGET): README.pod
 	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release="libdogleg $(VERSION)" --section=$(MAN_SECTION) $^ $@
 
 ifdef DESTDIR
-install:
+install: $(ALL_TARGETS)
 	mkdir -p $(DESTDIR)/usr/lib/
 	install -m 0644 $(LIB_TARGETS) $(DESTDIR)/usr/lib/
 	cd $(DESTDIR)/usr/lib/ && \
