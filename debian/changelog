@@ -1,3 +1,14 @@
+libdogleg (0.05) unstable; urgency=low
+
+  * I now require debhelper 7, not 8
+  * 'install' rules now builds everything
+  * updated URL to the license text
+  * removed unneeded packaging files
+  * packaging shared object in a more debian-like way
+  * I now make a native package
+
+ -- Dima Kogan <dima@oblong.com>  Sun, 30 Oct 2011 13:37:39 -0700
+
 libdogleg (0.04-1) unstable; urgency=low
 
   * Re-licensed under the LGPL
