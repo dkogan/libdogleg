@@ -18,7 +18,7 @@ Description: Dev files for libdogleg1
 Package: libdogleg1
 Section: libs
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libsuitesparse-metis-3.1.0 | libcholmod1.7.1
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Powell's dog-leg optimization routine for sparse matrices.
  Implements Powell's dog-leg optimization routine for sparse matrices. Solves
  unconstrained non-linear data-fitting problems
