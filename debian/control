@@ -22,3 +22,11 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Powell's dog-leg optimization routine for sparse matrices.
  Implements Powell's dog-leg optimization routine for sparse matrices. Solves
  unconstrained non-linear data-fitting problems
+
+Package: libdogleg1-dbg
+Section: debug
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Powell's dog-leg optimization routine for sparse matrices. Debug symbols
+ Implements Powell's dog-leg optimization routine for sparse matrices. Solves
+ unconstrained non-linear data-fitting problems
