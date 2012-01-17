@@ -1,3 +1,9 @@
+libdogleg (0.06) unstable; urgency=low
+
+  * API-breaking change: the user can retrieve the full solver context
+
+ -- Dima Kogan <dima@oblong.com>  Tue, 17 Jan 2012 15:57:43 -0800
+
 libdogleg (0.05) unstable; urgency=low
 
   * I now require debhelper 7, not 8
