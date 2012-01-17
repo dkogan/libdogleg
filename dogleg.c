@@ -362,7 +362,7 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
 
   if(point->updateGN_cholmoddense != NULL)
     cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
-  
+
   point->updateGN_cholmoddense = cholmod_solve(CHOLMOD_A,
                                                ctx->factorization,
                                                &Jt_x_dense,
