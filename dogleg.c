@@ -246,23 +246,6 @@ void dogleg_testGradient(unsigned int var, const double* p0,
 // solver routines
 //////////////////////////////////////////////////////////////////////////////////////////
 
-typedef struct
-{
-  cholmod_common  common;
-
-  dogleg_callback_t* f;
-  void*              cookie;
-
-  dogleg_operatingPoint_t* beforeStep;
-  dogleg_operatingPoint_t* afterStep;
-  cholmod_factor*          factorization;
-
-  // Have I ever seen a singular JtJ? If so, I add a small constant to the
-  // diagonal from that point on. This is a simple and fast way to deal with
-  // singularities. This is suboptimal but works for me for now.
-  int               wasPositiveSemidefinite;
-} solverContext_t;
-
 static void computeCauchyUpdate(dogleg_operatingPoint_t* point)
 {
   // I already have this data, so don't need to recompute
@@ -297,7 +280,7 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point)
     fprintf(stderr, "cauchy step size %.20f\n", sqrt(point->updateCauchy_lensq));
 }
 
-static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, solverContext_t* ctx)
+static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
   if(point->updateGN_valid)
@@ -406,7 +389,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
 // takes in point->p, and computes all the quantities derived from it, storing
 // the result in the other members of the operatingPoint structure. Returns
 // true if the gradient-size termination criterion has been met
-static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, solverContext_t* ctx)
+static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   (*ctx->f)(point->p, point->x, point->Jt, ctx->cookie);
 
@@ -447,7 +430,7 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 // radius. Returns the expected improvement, based on the step taken and the
 // linearized x(p). If we can stop iterating, returns a negative number
 static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
-                           double trustregion, solverContext_t* ctx)
+                           double trustregion, dogleg_solverContext_t* ctx)
 {
   if( DOGLEG_DEBUG )
     fprintf(stderr, "taking step with trustregion %.20f\n", trustregion);
@@ -549,7 +532,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
   return rho > 0.0;
 }
 
-static int runOptimizer(solverContext_t* ctx)
+static int runOptimizer(dogleg_solverContext_t* ctx)
 {
   double trustregion = TRUSTREGION0;
   int stepCount = 0;
@@ -706,10 +689,10 @@ double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int Nmeas, unsigned int NJnnz,
                        dogleg_callback_t* f, void* cookie)
 {
-  solverContext_t ctx = {.f                       = f,
-                         .cookie                  = cookie,
-                         .factorization           = NULL,
-                         .wasPositiveSemidefinite = 0};
+  dogleg_solverContext_t ctx = {.f                       = f,
+                                .cookie                  = cookie,
+                                .factorization           = NULL,
+                                .wasPositiveSemidefinite = 0};
 
   if( !cholmod_start(&ctx.common) )
   {

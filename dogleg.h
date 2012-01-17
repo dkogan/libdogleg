@@ -31,6 +31,24 @@ typedef struct
   int didStepToEdgeOfTrustRegion;
 } dogleg_operatingPoint_t;
 
+// solver context. This has all the internal state of the solver
+typedef struct
+{
+  cholmod_common  common;
+
+  dogleg_callback_t* f;
+  void*              cookie;
+
+  dogleg_operatingPoint_t* beforeStep;
+  dogleg_operatingPoint_t* afterStep;
+  cholmod_factor*          factorization;
+
+  // Have I ever seen a singular JtJ? If so, I add a small constant to the
+  // diagonal from that point on. This is a simple and fast way to deal with
+  // singularities. This is suboptimal but works for me for now.
+  int               wasPositiveSemidefinite;
+} dogleg_solverContext_t;
+
 
 
 double dogleg_optimize(double* p, unsigned int Nstate,
