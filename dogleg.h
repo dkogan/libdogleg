@@ -50,16 +50,31 @@ typedef struct
 } dogleg_solverContext_t;
 
 
-
+// The main optimization callback. Initial estimate of the solution passed in p,
+// final optimized solution returned in p. p has Nstate variables. There are
+// Nmeas measurements, the jacobian matrix has NJnnz non-zero entries.
+//
+// The evaluation function is given in the callback f; this function is passed
+// the given cookie
+//
+// If we want to get the full solver state when we're done, a non-NULL
+// returnContext pointer can be given. If this is done then THE USER IS
+// RESPONSIBLE FOR FREEING ITS MEMORY WITH dogleg_freeContext()
 double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int Nmeas, unsigned int NJnnz,
-                       dogleg_callback_t* f, void* cookie);
+                       dogleg_callback_t* f, void* cookie,
+                       dogleg_solverContext_t** returnContext);
 
 void dogleg_testGradient(unsigned int var, const double* p0,
                          unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
                          dogleg_callback_t* f, void* cookie);
 
 
+// If we want to get the full solver state when we're done optimizing, we can
+// pass a non-NULL returnContext pointer to dogleg_optimize(). If we do this,
+// then the user MUST call dogleg_freeContext() to deallocate the pointer when
+// the USER is done
+void dogleg_freeContext(dogleg_solverContext_t** ctx);
 
 
 ////////////////////////////////////////////////////////////////

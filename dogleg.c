@@ -685,42 +685,56 @@ static void set_cholmod_options(cholmod_common* common)
   common->print_function = cholmod_error_callback;
 }
 
+void dogleg_freeContext(dogleg_solverContext_t** ctx)
+{
+  freeOperatingPoint(&(*ctx)->beforeStep, &(*ctx)->common);
+  freeOperatingPoint(&(*ctx)->afterStep , &(*ctx)->common);
+
+  if((*ctx)->factorization != NULL)
+    cholmod_free_factor (&(*ctx)->factorization, &(*ctx)->common);
+  cholmod_finish(&(*ctx)->common);
+  free(*ctx);
+  *ctx = NULL;
+}
+
 double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int Nmeas, unsigned int NJnnz,
-                       dogleg_callback_t* f, void* cookie)
+                       dogleg_callback_t* f,
+                       void* cookie,
+                       dogleg_solverContext_t** returnContext)
 {
-  dogleg_solverContext_t ctx = {.f                       = f,
-                                .cookie                  = cookie,
-                                .factorization           = NULL,
-                                .wasPositiveSemidefinite = 0};
+  dogleg_solverContext_t* ctx  = malloc(sizeof(dogleg_solverContext_t));
+  ctx->f                       = f;
+  ctx->cookie                  = cookie;
+  ctx->factorization           = NULL;
+  ctx->wasPositiveSemidefinite = 0;
 
-  if( !cholmod_start(&ctx.common) )
+  if( returnContext != NULL )
+    *returnContext = ctx;
+
+  if( !cholmod_start(&ctx->common) )
   {
     fprintf(stderr, "Couldn't initialize CHOLMOD\n");
     return -1.0;
   }
 
-  set_cholmod_options(&ctx.common);
+  set_cholmod_options(&ctx->common);
 
-  ctx.beforeStep = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx.common);
-  ctx.afterStep  = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx.common);
+  ctx->beforeStep = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx->common);
+  ctx->afterStep  = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx->common);
 
-  memcpy(ctx.beforeStep->p, p, Nstate * sizeof(double));
+  memcpy(ctx->beforeStep->p, p, Nstate * sizeof(double));
 
   // everything is set up, so run the solver!
-  int    numsteps = runOptimizer(&ctx);
-  double norm2_x  = ctx.beforeStep->norm2_x;
+  int    numsteps = runOptimizer(ctx);
+  double norm2_x  = ctx->beforeStep->norm2_x;
 
   // runOptimizer places the most recent results into beforeStep in preparation for another
   // iteration
-  memcpy(p, ctx.beforeStep->p, Nstate * sizeof(double));
+  memcpy(p, ctx->beforeStep->p, Nstate * sizeof(double));
 
-  freeOperatingPoint(&ctx.beforeStep, &ctx.common);
-  freeOperatingPoint(&ctx.afterStep , &ctx.common);
-
-  if(ctx.factorization != NULL)
-    cholmod_free_factor (&ctx.factorization, &ctx.common);
-  cholmod_finish(&ctx.common);
+  if( returnContext == NULL )
+    dogleg_freeContext(&ctx);
 
   fprintf(stderr, "success! took %d iterations\n", numsteps);
   return norm2_x;
