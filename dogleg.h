@@ -10,6 +10,29 @@ typedef void (dogleg_callback_t)(const double*   p,
                                  cholmod_sparse* Jt,
                                  void*           cookie);
 
+// an operating point of the solver
+typedef struct
+{
+  double*         p;
+  double*         x;
+  double          norm2_x;
+  cholmod_sparse* Jt;
+  double*         Jt_x;
+
+  // the cached update vectors. It's useful to cache these so that when a step is rejected, we can
+  // reuse these when we retry
+  double*        updateCauchy;
+  cholmod_dense* updateGN_cholmoddense;
+  double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
+
+  // whether the current update vectors are correct or not
+  int updateCauchy_valid, updateGN_valid;
+
+  int didStepToEdgeOfTrustRegion;
+} dogleg_operatingPoint_t;
+
+
+
 double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int Nmeas, unsigned int NJnnz,
                        dogleg_callback_t* f, void* cookie);

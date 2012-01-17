@@ -248,34 +248,14 @@ void dogleg_testGradient(unsigned int var, const double* p0,
 
 typedef struct
 {
-  double*         p;
-  double*         x;
-  double          norm2_x;
-  cholmod_sparse* Jt;
-  double*         Jt_x;
-
-  // the cached update vectors. It's useful to cache these so that when a step is rejected, we can
-  // reuse these when we retry
-  double*        updateCauchy;
-  cholmod_dense* updateGN_cholmoddense;
-  double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
-
-  // whether the current update vectors are correct or not
-  int updateCauchy_valid, updateGN_valid;
-
-  int didStepToEdgeOfTrustRegion;
-} operatingPoint_t;
-
-typedef struct
-{
   cholmod_common  common;
 
   dogleg_callback_t* f;
   void*              cookie;
 
-  operatingPoint_t* beforeStep;
-  operatingPoint_t* afterStep;
-  cholmod_factor*   factorization;
+  dogleg_operatingPoint_t* beforeStep;
+  dogleg_operatingPoint_t* afterStep;
+  cholmod_factor*          factorization;
 
   // Have I ever seen a singular JtJ? If so, I add a small constant to the
   // diagonal from that point on. This is a simple and fast way to deal with
@@ -283,7 +263,7 @@ typedef struct
   int               wasPositiveSemidefinite;
 } solverContext_t;
 
-static void computeCauchyUpdate(operatingPoint_t* point)
+static void computeCauchyUpdate(dogleg_operatingPoint_t* point)
 {
   // I already have this data, so don't need to recompute
   if(point->updateCauchy_valid)
@@ -317,7 +297,7 @@ static void computeCauchyUpdate(operatingPoint_t* point)
     fprintf(stderr, "cauchy step size %.20f\n", sqrt(point->updateCauchy_lensq));
 }
 
-static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* ctx)
+static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
   if(point->updateGN_valid)
@@ -376,9 +356,9 @@ static void computeGaussNewtonUpdate(operatingPoint_t* point, solverContext_t* c
     fprintf(stderr, "gn step size %.20f\n", sqrt(point->updateGN_lensq));
 }
 
-static void computeInterpolatedUpdate(double* update_dogleg,
-                                      operatingPoint_t* point,
-                                      double trustregion)
+static void computeInterpolatedUpdate(double*                  update_dogleg,
+                                      dogleg_operatingPoint_t* point,
+                                      double                   trustregion)
 {
   // I interpolate between the Cauchy-point step and the Gauss-Newton step
   // to find a step that takes me to the edge of my trust region.
@@ -426,7 +406,7 @@ static void computeInterpolatedUpdate(double* update_dogleg,
 // takes in point->p, and computes all the quantities derived from it, storing
 // the result in the other members of the operatingPoint structure. Returns
 // true if the gradient-size termination criterion has been met
-static int computeCallbackOperatingPoint(operatingPoint_t* point, solverContext_t* ctx)
+static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, solverContext_t* ctx)
 {
   (*ctx->f)(point->p, point->x, point->Jt, ctx->cookie);
 
@@ -452,7 +432,7 @@ static int computeCallbackOperatingPoint(operatingPoint_t* point, solverContext_
 
   return 1;
 }
-static double computeExpectedImprovement(const double* step, const operatingPoint_t* point)
+static double computeExpectedImprovement(const double* step, const dogleg_operatingPoint_t* point)
 {
   // My error function is F=norm2(f(p + step)). F(0) - F(step) =
   // = norm2(x) - norm2(x + J*step) = -2*inner(x,J*step) - norm2(J*step)
@@ -466,7 +446,7 @@ static double computeExpectedImprovement(const double* step, const operatingPoin
 // takes a step from the given operating point, using the given trust region
 // radius. Returns the expected improvement, based on the step taken and the
 // linearized x(p). If we can stop iterating, returns a negative number
-static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
+static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
                            double trustregion, solverContext_t* ctx)
 {
   if( DOGLEG_DEBUG )
@@ -547,8 +527,8 @@ static double takeStepFrom(operatingPoint_t* pointFrom, double* newp,
 // I have a candidate step. I adjust the trustregion accordingly, and also
 // report whether this step should be accepted (0 == rejected, otherwise
 // accepted)
-static int evaluateStep_adjustTrustRegion(const operatingPoint_t* before,
-                                          const operatingPoint_t* after,
+static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
+                                          const dogleg_operatingPoint_t* after,
                                           double* trustregion,
                                           double expectedImprovement)
 {
@@ -608,7 +588,7 @@ static int runOptimizer(solverContext_t* ctx)
         // I accept this step, so the after-step operating point is the before-step operating point
         // of the next iteration. I exchange the before- and after-step structures so that all the
         // pointers are still around and I don't have to re-allocate
-        operatingPoint_t* tmp;
+        dogleg_operatingPoint_t* tmp;
         tmp             = ctx->afterStep;
         ctx->afterStep  = ctx->beforeStep;
         ctx->beforeStep = tmp;
@@ -647,11 +627,11 @@ static int runOptimizer(solverContext_t* ctx)
   return stepCount;
 }
 
-static operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
-                                             int numNonzeroJacobianElements,
+static dogleg_operatingPoint_t* allocOperatingPoint(int      Nstate, int numMeasurements,
+                                             int             numNonzeroJacobianElements,
                                              cholmod_common* common)
 {
-  operatingPoint_t* point = malloc(sizeof(operatingPoint_t));
+  dogleg_operatingPoint_t* point = malloc(sizeof(dogleg_operatingPoint_t));
   ASSERT(point != NULL);
 
   point->p = malloc(Nstate * sizeof(point->p[0]));
@@ -683,7 +663,7 @@ static operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
   return point;
 }
 
-static void freeOperatingPoint(operatingPoint_t** point, cholmod_common* common)
+static void freeOperatingPoint(dogleg_operatingPoint_t** point, cholmod_common* common)
 {
   free((*point)->p);
   free((*point)->x);
