@@ -1,4 +1,4 @@
-API_VERSION = 1
+API_VERSION = 2
 
 # I parse the version from debian/changelog. This version is generally something
 # like 0.04-1 Here 0.04 is the main version and 1 is the debian package

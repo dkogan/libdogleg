@@ -11,11 +11,11 @@ Vcs-Browser: https://github.com/Oblong/libdogleg/commits/master
 Package: libdogleg-dev
 Section: libdevel
 Architecture: any
-Depends: libdogleg1 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
-Description: Dev files for libdogleg1
+Depends: libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
+Description: Dev files for libdogleg2
  Development files for Powell's dog-leg optimization routine for sparse matrices.
 
-Package: libdogleg1
+Package: libdogleg2
 Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -23,7 +23,7 @@ Description: Powell's dog-leg optimization routine for sparse matrices.
  Implements Powell's dog-leg optimization routine for sparse matrices. Solves
  unconstrained non-linear data-fitting problems
 
-Package: libdogleg1-dbg
+Package: libdogleg2-dbg
 Section: debug
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
