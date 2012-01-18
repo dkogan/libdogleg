@@ -1,7 +1,7 @@
-=head1 OVERVIEW
+=head1 NAME
 
-This is a general purpose sparse optimizer to solve data fitting problems. A common use case is
-sparse bundle adjustment.
+libdogleg - A general purpose sparse optimizer to solve data fitting problems,
+such as sparse bundle adjustment.
 
 =head1 DESCRIPTION
 
