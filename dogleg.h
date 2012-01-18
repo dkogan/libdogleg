@@ -39,8 +39,15 @@ typedef struct
   dogleg_callback_t* f;
   void*              cookie;
 
+  // between steps, beforeStep contains the operating point of the last step.
+  // afterStep is ONLY used while making the step. Externally, use beforeStep
+  // unless you really know what you're doing
   dogleg_operatingPoint_t* beforeStep;
   dogleg_operatingPoint_t* afterStep;
+
+  // The result of the last JtJ factorization performed. Note that JtJ is not
+  // necessarily factorized at every step, so this is NOT guaranteed to contain
+  // the factorization of the most recent JtJ
   cholmod_factor*          factorization;
 
   // Have I ever seen a singular JtJ? If so, I add a small constant to the

@@ -61,7 +61,8 @@ This is the main call to the library. Its declared as
 
  double dogleg_optimize(double* p, unsigned int Nstate,
                         unsigned int Nmeas, unsigned int NJnnz,
-                        dogleg_callback_t* f, void* cookie);
+                        dogleg_callback_t* f, void* cookie,
+                        dogleg_solverContext_t** returnContext);
 
 =over
 
@@ -81,32 +82,27 @@ being solved
 
 =item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
 
+=item * If not C<NULL>, C<returnContext> can be used to retrieve the full
+context structure from the solver. This can be useful since this structure
+contains the latest operating point values. It also has an active
+C<cholmod_common> structure, which can be reused if more CHOLMOD routines need
+to be called externally. I<If this data is requested, the user is required to
+free it with C<dogleg_freeContext> when done>.
+
 =back
 
 C<dogleg_optimize> returns norm2( B<x> ) at the minimum, or a negative value if an error occurred.
 
-=head3 dogleg_callback_t
+=head3 dogleg_freeContext
 
-The main user callback that specifies the optimization problem has type
+Used to deallocate memory used for an optimization cycle. Defined as:
 
- typedef void (dogleg_callback_t)(const double*   p,
-                                  double*         x,
-                                  cholmod_sparse* Jt,
-                                  void*           cookie);
+ void dogleg_freeContext(dogleg_solverContext_t** ctx);
 
-=over
-
-=item * B<p> is the current state vector
-
-=item * B<x> is the resulting I<f>(B<p>)
-
-=item * B<Jt> is the transpose of dB<f>/dB<p> at B<p>. As mentioned previously, B<Jt> is stored
-column-first by CHOLMOD, which can be interpreted as storing B<J> row-first by the user-defined
-callback routine
-
-=item * The C<cookie> is the user-defined arbitrary data passed into C<dogleg_optimize>.
-
-=back
+If a pointer to a context is not requested (by passing C<returnContext = NULL>
+to C<dogleg_optimize>), libdogleg calls this routine automatically. If the user
+I<did> retrieve this pointer, though, it must be freed with
+C<dogleg_freeContext> when the user is finished.
 
 =head3 dogleg_testGradient
 
@@ -139,6 +135,101 @@ developing the program that uses libdogleg.
 
 This function returns nothing, but prints out the test results.
 
+
+=head3 dogleg_callback_t
+
+The main user callback that specifies the optimization problem has type
+
+ typedef void (dogleg_callback_t)(const double*   p,
+                                  double*         x,
+                                  cholmod_sparse* Jt,
+                                  void*           cookie);
+
+=over
+
+=item * B<p> is the current state vector
+
+=item * B<x> is the resulting I<f>(B<p>)
+
+=item * B<Jt> is the transpose of dB<f>/dB<p> at B<p>. As mentioned previously, B<Jt> is stored
+column-first by CHOLMOD, which can be interpreted as storing B<J> row-first by the user-defined
+callback routine
+
+=item * The C<cookie> is the user-defined arbitrary data passed into C<dogleg_optimize>.
+
+=back
+
+=head3 dogleg_solverContext_t
+
+This is the solver context that can be retrieved through the C<returnContext>
+parameter of the C<dogleg_optimize> call. This structure contains I<all> the
+internal state used by the solver. If requested, the user is responsible for
+calling C<dogleg_freeContext> when done. This structure is defined as:
+
+ typedef struct
+ {
+   cholmod_common  common;
+ 
+   dogleg_callback_t* f;
+   void*              cookie;
+ 
+   // between steps, beforeStep contains the operating point of the last step.
+   // afterStep is ONLY used while making the step. Externally, use beforeStep
+   // unless you really know what you're doing
+   dogleg_operatingPoint_t* beforeStep;
+   dogleg_operatingPoint_t* afterStep;
+
+   // The result of the last JtJ factorization performed. Note that JtJ is not
+   // necessarily factorized at every step, so this is NOT guaranteed to contain
+   // the factorization of the most recent JtJ
+   cholmod_factor*          factorization;
+ 
+   // Have I ever seen a singular JtJ? If so, I add a small constant to the
+   // diagonal from that point on. This is a simple and fast way to deal with
+   // singularities. This is suboptimal but works for me for now.
+   int               wasPositiveSemidefinite;
+ } dogleg_solverContext_t;
+
+Some of the members are copies of the data passed into C<dogleg_optimize>; some
+others are internal state. Of potential interest are
+
+=over
+
+=item * C<common> is a cholmod_common structure used by all CHOLMOD calls. This
+can be used for any extra CHOLMOD work the user may want to do
+
+=item * C<beforeStep> contains the operating point of the optimum solution. The
+user can analyze this data without the need to re-call the callback routine.
+
+=back
+
+=head3 dogleg_operatingPoint_t
+
+An operating point of the solver. This is a part of C<dogleg_solverContext_t>.
+Various variables describing the operating point such as B<p>, B<J>, B<x>,
+B<norm2(x)> and B<Jt x> are available. All of the just-mentioned variables are
+computed at every step and are thus always valid.
+
+ // an operating point of the solver
+ typedef struct
+ {
+   double*         p;
+   double*         x;
+   double          norm2_x;
+   cholmod_sparse* Jt;
+   double*         Jt_x;
+ 
+   // the cached update vectors. It's useful to cache these so that when a step is rejected, we can
+   // reuse these when we retry
+   double*        updateCauchy;
+   cholmod_dense* updateGN_cholmoddense;
+   double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
+ 
+   // whether the current update vectors are correct or not
+   int updateCauchy_valid, updateGN_valid;
+ 
+   int didStepToEdgeOfTrustRegion;
+ } dogleg_operatingPoint_t;
 
 =head2 Parameters
 
