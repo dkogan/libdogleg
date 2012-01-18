@@ -13,7 +13,8 @@ Section: libdevel
 Architecture: any
 Depends: libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
 Description: Dev files for libdogleg2
- Development files for Powell's dog-leg optimization routine for sparse matrices.
+ Development files for Powell's dog-leg optimization routine for sparse
+ matrices.
 
 Package: libdogleg2
 Section: libs
