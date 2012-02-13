@@ -540,7 +540,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
     return stepCount;
 
-  for(stepCount=0; stepCount<MAX_ITERATIONS; stepCount++)
+  while( stepCount<MAX_ITERATIONS )
   {
     if( DOGLEG_DEBUG )
     {
@@ -567,6 +567,8 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       {
         if( DOGLEG_DEBUG )
           fprintf(stderr, "accepted step\n");
+
+        stepCount++;
 
         // I accept this step, so the after-step operating point is the before-step operating point
         // of the next iteration. I exchange the before- and after-step structures so that all the
