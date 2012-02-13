@@ -1,3 +1,10 @@
+libdogleg (0.07) unstable; urgency=low
+
+  * fixed off-by-one error in reporting of iteration count
+  * added sample program
+
+ -- Dima Kogan <dima@oblong.com>  Sun, 12 Feb 2012 18:13:40 -0800
+
 libdogleg (0.06) unstable; urgency=low
 
   * API-breaking change: the user can retrieve the full solver context
