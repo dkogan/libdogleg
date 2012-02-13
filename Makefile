@@ -60,6 +60,11 @@ install:
 endif
 
 
+sample: $(TARGET_SO) sample.o
+	$(CC) $^ -o $@
+
+sample.o: CFLAGS += -I.
+
 clean:
 	rm -f libdogleg.so* *.o *.a *.d $(ALL_TARGETS)
 
