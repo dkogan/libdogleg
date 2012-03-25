@@ -44,7 +44,7 @@ static double UPDATE_THRESHOLD      = 1e-8;
 static double TRUSTREGION_THRESHOLD = 1e-8;
 
 // if I ever see a singular JtJ, I factor JtJ + LAMBDA*I from that point on
-#define LAMBDA 1e-20
+#define LAMBDA_INITIAL 1e-10
 
 // these parameters likely should be messed with
 void dogleg_setDebug(int debug)
@@ -296,23 +296,31 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
   }
 
   // try to factorize the matrix directly. If it's singular, add a small
-  // constant to the diagonal from this point on
-  if(!ctx->wasPositiveSemidefinite)
+  // constant to the diagonal. This constant gets larger if we keep being
+  // singular
+  while(1)
   {
-    ASSERT( cholmod_factorize(point->Jt, ctx->factorization, &ctx->common) );
-    if(ctx->factorization->minor != ctx->factorization->n)
+    if( ctx->lambda == 0.0 )
+      ASSERT( cholmod_factorize(point->Jt, ctx->factorization, &ctx->common) );
+    else
     {
-      ctx->wasPositiveSemidefinite = 1;
-      if( DOGLEG_DEBUG )
-        fprintf(stderr, "singular JtJ. Adding %g I from now on\n", LAMBDA);
+      double beta[] = { ctx->lambda, 0 };
+      ASSERT( cholmod_factorize_p(point->Jt, beta, NULL, 0,
+                                  ctx->factorization, &ctx->common) );
     }
+
+    if(ctx->factorization->minor == ctx->factorization->n)
+      break;
+
+    // singular JtJ. Raise lambda and go again
+    if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
+    else                    ctx->lambda *= 10.0;
+
+    if( DOGLEG_DEBUG )
+      fprintf(stderr, "singular JtJ. Have rank/full rank: %zd/%zd. Adding %g I from now on\n",
+              ctx->factorization->minor, ctx->factorization->n, ctx->lambda);
   }
-  if(ctx->wasPositiveSemidefinite)
-  {
-    double beta[] = {LAMBDA, 0};
-    ASSERT( cholmod_factorize_p(point->Jt, beta, NULL, 0,
-                                ctx->factorization, &ctx->common) );
-  }
+
 
   // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
   cholmod_dense Jt_x_dense = {.nrow  = point->Jt->nrow,
@@ -705,11 +713,11 @@ double dogleg_optimize(double* p, unsigned int Nstate,
                        void* cookie,
                        dogleg_solverContext_t** returnContext)
 {
-  dogleg_solverContext_t* ctx  = malloc(sizeof(dogleg_solverContext_t));
-  ctx->f                       = f;
-  ctx->cookie                  = cookie;
-  ctx->factorization           = NULL;
-  ctx->wasPositiveSemidefinite = 0;
+  dogleg_solverContext_t* ctx = malloc(sizeof(dogleg_solverContext_t));
+  ctx->f                      = f;
+  ctx->cookie                 = cookie;
+  ctx->factorization          = NULL;
+  ctx->lambda                 = 0.0;
 
   if( returnContext != NULL )
     *returnContext = ctx;

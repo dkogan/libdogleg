@@ -50,10 +50,11 @@ typedef struct
   // the factorization of the most recent JtJ
   cholmod_factor*          factorization;
 
-  // Have I ever seen a singular JtJ? If so, I add a small constant to the
-  // diagonal from that point on. This is a simple and fast way to deal with
-  // singularities. This is suboptimal but works for me for now.
-  int               wasPositiveSemidefinite;
+  // Have I ever seen a singular JtJ? If so, I add this constant to the diagonal
+  // from that point on. This is a simple and fast way to deal with
+  // singularities. This constant starts at 0, and is increased every time a
+  // singular JtJ is encountered. This is suboptimal but works for me for now.
+  double                   lambda;
 } dogleg_solverContext_t;
 
 
