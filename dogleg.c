@@ -188,10 +188,13 @@ void dogleg_testGradient(unsigned int var, const double* p0,
                          unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
                          dogleg_callback_t* f, void* cookie)
 {
-  double           x0[Nmeas];
-  double           x [Nmeas];
+  double* x0 = malloc(Nmeas  * sizeof(double));
+  double* x  = malloc(Nmeas  * sizeof(double));
+  double* p  = malloc(Nstate * sizeof(double));
+  ASSERT(x0);
+  ASSERT(x);
+  ASSERT(p);
 
-  double           p [Nstate];
   memcpy(p, p0, Nstate * sizeof(double));
 
 
@@ -239,6 +242,10 @@ void dogleg_testGradient(unsigned int var, const double* p0,
   cholmod_free_sparse(&Jt,  &_cholmod_common);
   cholmod_free_sparse(&Jt0, &_cholmod_common);
   cholmod_finish(&_cholmod_common);
+
+  free(x0);
+  free(x);
+  free(p);
 }
 
 
