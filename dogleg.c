@@ -370,7 +370,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   // k = (-2*c +- sqrt(4*c*c - 4*l2*(norm2(a)-dsq)))/(2*l2)
   //   = (-c +- sqrt(c*c - l2*(norm2(a)-dsq)))/l2
 
-  // to make 100% sure the descriminant is positive, I choose a to be the
+  // to make 100% sure the discriminant is positive, I choose a to be the
   // cauchy step.  The solution must have k in [0,1], so I much have the
   // +sqrt side, since the other one is negative
   double        dsq    = trustregion*trustregion;
