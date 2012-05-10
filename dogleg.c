@@ -575,7 +575,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       if(expectedImprovement < 0.0)
         return stepCount;
 
-      double afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
+      int afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
