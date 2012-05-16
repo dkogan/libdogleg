@@ -60,8 +60,8 @@ install:
 endif
 
 
-sample: $(TARGET_SO) sample.o
-	$(CC) $^ -o $@
+sample: sample.o libdogleg.a
+	$(CC) $(LDLIBS) $^ -o $@
 
 sample.o: CFLAGS += -I.
 
