@@ -154,9 +154,11 @@ int main(void)
   int Jnnz = Nmeasurements * Nstate;
 
   // first, let's test our gradients. This is just a verification step to make
-  // sure the optimizerCallback() is written correctly. This will generate LOTS
-  // of output. You need to make sure that the reported and observed gradients
-  // match (the relative error is low)
+  // sure the optimizerCallback() is written correctly. Normally, you would do
+  // this as a check when developing your program, but would turn this off in
+  // the final application. This will generate LOTS of output. You need to make
+  // sure that the reported and observed gradients match (the relative error is
+  // low)
   fprintf(stderr, "have %d variables\n", Nstate);
   for(int i=0; i<Nstate; i++)
   {
