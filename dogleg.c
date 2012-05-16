@@ -541,6 +541,9 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
     *trustregion *= TRUSTREGION_DECREASE_FACTOR;
   else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
   {
+    if( DOGLEG_DEBUG )
+      fprintf(stderr, "rho large enough. increasing trust region\n");
+
     *trustregion *= TRUSTREGION_INCREASE_FACTOR;
   }
 
@@ -559,14 +562,14 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   {
     if( DOGLEG_DEBUG )
     {
-      fprintf(stderr, "step %d\n", stepCount);
       fprintf(stderr, "\n\n\n");
+      fprintf(stderr, "step %d\n", stepCount);
     }
 
     while(1)
     {
       if( DOGLEG_DEBUG )
-        fprintf(stderr, "\n\n");
+        fprintf(stderr, "\n");
 
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
