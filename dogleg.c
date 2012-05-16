@@ -537,8 +537,22 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
     fprintf(stderr, "expected improvement: %.20f, got improvement %.20f. rho = %.20f\n",
             expectedImprovement, observedImprovement, rho);
 
-  if(rho < TRUSTREGION_DECREASE_THRESHOLD)
+
+  // adjust the trust region
+  if( rho < TRUSTREGION_DECREASE_THRESHOLD )
+  {
+    if( DOGLEG_DEBUG )
+      fprintf(stderr, "rho too small. decreasing trust region\n");
+
+    // Our model doesn't fit well. We should reduce the trust region size. If
+    // the trust region size was affecting the attempted step, do this by a
+    // constant factor. Otherwise, drop the trustregion to attempted step size
+    // first
+    if( !before->didStepToEdgeOfTrustRegion )
+      *trustregion = sqrt(before->updateGN_lensq);
+
     *trustregion *= TRUSTREGION_DECREASE_FACTOR;
+  }
   else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
   {
     if( DOGLEG_DEBUG )
