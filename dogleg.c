@@ -534,8 +534,10 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
 
   double rho = observedImprovement / expectedImprovement;
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "expected improvement: %.20f, got improvement %.20f. rho = %.20f\n",
-            expectedImprovement, observedImprovement, rho);
+  {
+    fprintf(stderr, "observed/expected improvement: %.6g/%.6g. rho = %.6g\n",
+            observedImprovement, expectedImprovement, rho);
+  }
 
 
   // adjust the trust region
@@ -572,6 +574,10 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
     return stepCount;
 
+  if( DOGLEG_DEBUG )
+    fprintf(stderr, "Initial operating point has norm2_x %.6g\n", ctx->beforeStep->norm2_x);
+
+
   while( stepCount<MAX_ITERATIONS )
   {
     if( DOGLEG_DEBUG )
@@ -593,6 +599,8 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         return stepCount;
 
       int afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
+      if( DOGLEG_DEBUG )
+        fprintf(stderr, "Evaluated operating point with norm2_x %.6g\n", ctx->afterStep->norm2_x);
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
