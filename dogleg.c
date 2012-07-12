@@ -230,12 +230,12 @@ void dogleg_testGradient(unsigned int var, const double* p0,
     if(isnan(gRep))
     {
       if( gObs != 0 )
-        printf("var,meas %d,%d: no reported gradient, but observed %.20f\n", var, i, gObs);
+        printf("var,meas %d,%d: no reported gradient, but observed %.6g\n", var, i, gObs);
 
       continue;
     }
 
-    printf("var,meas %d,%d: reported: %.20f, observed: %.20f, err: %.20f, relativeerr: %.20f\n", var, i,
+    printf("var,meas %d,%d: reported: %.6g, observed: %.6g, err: %.6g, relativeerr: %.6g\n", var, i,
            gRep, gObs, fabs(gRep - gObs), fabs(gRep - gObs) / ( (fabs(gRep) + fabs(gObs)) / 2.0 ) );
   }
 
@@ -284,7 +284,7 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point)
                   point->Jt_x, k, point->Jt->nrow);
 
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "cauchy step size %.20f\n", sqrt(point->updateCauchy_lensq));
+    fprintf(stderr, "cauchy step size %.6g\n", sqrt(point->updateCauchy_lensq));
 }
 
 static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
@@ -351,7 +351,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
   point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x,
                                 point->Jt->nrow);
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "gn step size %.20f\n", sqrt(point->updateGN_lensq));
+    fprintf(stderr, "gn step size %.6g\n", sqrt(point->updateGN_lensq));
 }
 
 static void computeInterpolatedUpdate(double*                  update_dogleg,
@@ -385,7 +385,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
   if(discriminant < 0.0)
   {
-    fprintf(stderr, "negative discriminant: %.20f!\n", discriminant);
+    fprintf(stderr, "negative discriminant: %.6g!\n", discriminant);
     discriminant = 0.0;
   }
   double k = (neg_c + sqrt(discriminant))/l2;
@@ -397,7 +397,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   if( DOGLEG_DEBUG )
   {
     double updateNorm = norm2(update_dogleg, point->Jt->nrow);
-    fprintf(stderr, "k %.20f, norm %.20f\n", k, sqrt(updateNorm));
+    fprintf(stderr, "k %.6g, norm %.6g\n", k, sqrt(updateNorm));
   }
 }
 
@@ -448,7 +448,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
                            double trustregion, dogleg_solverContext_t* ctx)
 {
   if( DOGLEG_DEBUG )
-    fprintf(stderr, "taking step with trustregion %.20f\n", trustregion);
+    fprintf(stderr, "taking step with trustregion %.6g\n", trustregion);
 
   double update_array[pointFrom->Jt->nrow];
   double* update;
