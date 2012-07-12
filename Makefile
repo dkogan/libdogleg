@@ -22,8 +22,12 @@ LDLIBS += -lcholmod
 LDLIBS += -lm
 
 HEADERS = dogleg.h
-TARGET_SO = libdogleg.so.$(SO_VERSION)
-LIB_TARGETS = libdogleg.a $(TARGET_SO)
+
+TARGET_SO_BARE   = libdogleg.so
+TARGET_SO_FULL   = $(TARGET_SO_BARE).$(SO_VERSION)
+TARGET_SO_SONAME = $(TARGET_SO_BARE).$(API_VERSION)
+
+LIB_TARGETS = libdogleg.a $(TARGET_SO_BARE) $(TARGET_SO_FULL) $(TARGET_SO_SONAME)
 
 MAN_SECTION = 3
 MAN_TARGET = libdogleg.$(MAN_SECTION)
@@ -35,8 +39,11 @@ all: $(ALL_TARGETS)
 %.a: dogleg.o
 	ar rcvu $@ $^
 
-%.so.$(SO_VERSION): dogleg-pic.o
+$(TARGET_SO_FULL): dogleg-pic.o
 	$(CC) $(LDLIBS) -shared  $^ -Wl,-soname -Wl,libdogleg.so.$(API_VERSION) -o $@
+
+$(TARGET_SO_SONAME) $(TARGET_SO_BARE): $(TARGET_SO_FULL)
+	ln -fs $^ $@
 
 %-pic.o: %.c
 	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
@@ -47,11 +54,7 @@ $(MAN_TARGET): README.pod
 ifdef DESTDIR
 install: $(ALL_TARGETS)
 	mkdir -p $(DESTDIR)/usr/lib/
-	install -m 0644 $(LIB_TARGETS) $(DESTDIR)/usr/lib/
-	cd $(DESTDIR)/usr/lib/ && \
-	ln -fs $(TARGET_SO) libdogleg.so.$(API_VERSION) && \
-	ln -fs $(TARGET_SO) libdogleg.so && \
-	cd -
+	cp -P $(LIB_TARGETS) $(DESTDIR)/usr/lib/
 	mkdir -p $(DESTDIR)/usr/include/
 	install -m 0644 $(HEADERS) $(DESTDIR)/usr/include/
 else
