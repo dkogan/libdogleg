@@ -224,8 +224,9 @@ void dogleg_testGradient(unsigned int var, const double* p0,
 
   for(unsigned int i=0; i<Nmeas; i++)
   {
+    // estimated gradients at the midpoint between x and x0
     double gObs = (x[i] - x0[i]) / GRADTEST_DELTA;
-    double gRep = getGrad(var, i, Jt0);
+    double gRep = (getGrad(var, i, Jt0) + getGrad(var, i, Jt)) / 2.0;
 
     if(isnan(gRep))
     {
