@@ -5,7 +5,11 @@
 #include <stdarg.h>
 #include <math.h>
 #include <string.h>
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+#else
 #include <malloc.h>
+#endif
 #include "dogleg.h"
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
