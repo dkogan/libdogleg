@@ -332,7 +332,7 @@ better to ask for B<x> and then, if the step is accepted, to ask for B<J>.
 
 =head1 AUTHOR
 
-Dima Kogan, C<< <dima@oblong.com> >>
+Dima Kogan, C<< <dima@secretsauce.net> >>
 
 =head1 LICENSE AND COPYRIGHT
 
