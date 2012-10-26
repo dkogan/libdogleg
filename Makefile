@@ -7,9 +7,19 @@ OS = $(shell uname -s)
 # version. I only use the main version and strip leading 0s, so the above
 # becomes 0.4
 
+LPAREN := (
+VERSION := $(shell awk '{ sub( ".*\\$(LPAREN)", "" );			\
+                          v = gensub( "^ *([0-9\\.]+).*?", "\\1", 1);	\
+                          gsub( "\\.0+", ".", v);			\
+                          print v;					\
+                          exit}' debian/changelog)
+
+ifeq ($(strip $(VERSION)),)
+$(error "Couldn't parse version from debian/changelog")
+endif
+
 ifeq ($(OS),Darwin)
 	CC = gcc # otherwise, CC defaults to clang
-	VERSION = $(shell awk '/libdogleg (.*) /{print substr($$2,2,length($$2)-2); exit}' < debian/changelog | perl -pe 's/\.0*([1-9])/.$$1/g')
 	SO_VERSION=$(API_VERSION).$(VERSION)
 	TARGET_SO_BARE   = libdogleg.dylib
 	TARGET_SO_FULL   = libdogleg.$(SO_VERSION).dylib
@@ -18,16 +28,11 @@ ifeq ($(OS),Darwin)
 # osx doesn't have DT_NEEDED or something, so I specify these explicitly
 	LDLIBS += -lsuitesparseconfig -lamd -lcolamd -llapack -lblas
 else
-	VERSION := $(shell dpkg-parsechangelog | awk '/^Version/{ gsub("-.*","",$$2); print $$2}' | perl -pe 's/\.0*([1-9])/.$$1/g')
 	SO_VERSION=$(API_VERSION).$(VERSION)
 	TARGET_SO_BARE   = libdogleg.so
 	TARGET_SO_FULL   = $(TARGET_SO_BARE).$(SO_VERSION)
 	TARGET_SO_SONAME = $(TARGET_SO_BARE).$(API_VERSION)
 	LDFLAGS += -Wl,-soname -Wl,libdogleg.so.$(API_VERSION)
-endif
-
-ifeq ($(strip $(VERSION)),)
-$(error "Couldn't parse version from debian/changelog")
 endif
 
 OPTFLAGS = -O3 -ffast-math -mtune=core2
