@@ -6,13 +6,7 @@ OS = $(shell uname -s)
 # like 0.04-1 Here 0.04 is the main version and 1 is the debian package
 # version. I only use the main version and strip leading 0s, so the above
 # becomes 0.4
-
-LPAREN := (
-VERSION := $(shell awk '{ sub( ".*\\$(LPAREN)", "" );			\
-                          v = gensub( "^ *([0-9\\.]+).*?", "\\1", 1);	\
-                          gsub( "\\.0+", ".", v);			\
-                          print v;					\
-                          exit}' debian/changelog)
+VERSION := $(shell sed -n 's/.*(\([0-9\.]*[0-9]\).*).*/\1/; s/\.0*/./g; p; q;' debian/changelog)
 
 ifeq ($(strip $(VERSION)),)
 $(error "Couldn't parse version from debian/changelog")
