@@ -58,7 +58,7 @@ $(TARGET_SO_SONAME) $(TARGET_SO_BARE): $(TARGET_SO_FULL)
 	ln -fs $^ $@
 
 %-pic.o: %.c
-	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) -fPIC $(CFLAGS) -c -o $@ $<
 
 $(MAN_TARGET): README.pod
 	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release="libdogleg $(VERSION)" --section=$(MAN_SECTION) $^ $@
