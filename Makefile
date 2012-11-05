@@ -48,7 +48,7 @@ ALL_TARGETS = $(LIB_TARGETS) $(MAN_TARGET)
 
 all: $(ALL_TARGETS)
 
-%.a: dogleg.o
+libdogleg.a: dogleg.o
 	ar rcvu $@ $^
 
 $(TARGET_SO_FULL): dogleg-pic.o
