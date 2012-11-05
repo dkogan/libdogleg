@@ -29,7 +29,10 @@ else
 	LDFLAGS += -Wl,-soname -Wl,libdogleg.so.$(API_VERSION)
 endif
 
-OPTFLAGS = -O3 -ffast-math -mtune=core2
+# Add my optimization flags if none already exist. These could exist if debian
+# packages are built.
+OPTFLAGS := $(if $(filter -O%, $(CFLAGS)),,-O3 -ffast-math -mtune=core2)
+
 FLAGS += -ggdb  -Wall -Wextra -MMD $(OPTFLAGS) -I/usr/include/suitesparse
 CFLAGS += $(FLAGS) --std=gnu99
 
