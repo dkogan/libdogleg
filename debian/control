@@ -1,0 +1,33 @@
+Source: libdogleg
+Priority: extra
+Maintainer: Dima Kogan <dima@secretsauce.net>
+Build-Depends: debhelper (>= 7.0.50~), libsuitesparse-dev | libsuitesparse-metis-dev, perl
+Standards-Version: 3.9.2
+Section: libs
+Homepage: https://github.com/Oblong/libdogleg
+Vcs-Git: git://github.com/Oblong/libdogleg.git
+Vcs-Browser: https://github.com/Oblong/libdogleg/commits/master
+
+Package: libdogleg-dev
+Section: libdevel
+Architecture: any
+Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
+Description: Dev files for libdogleg2
+ Development files for Powell's dog-leg optimization routine for sparse
+ matrices.
+
+Package: libdogleg2
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Powell's dog-leg optimization routine for sparse matrices.
+ Implements Powell's dog-leg optimization routine for sparse matrices. Solves
+ unconstrained non-linear data-fitting problems
+
+Package: libdogleg2-dbg
+Section: debug
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libdogleg2
+Description: Powell's dog-leg optimization routine for sparse matrices. Debug symbols
+ Implements Powell's dog-leg optimization routine for sparse matrices. Solves
+ unconstrained non-linear data-fitting problems
