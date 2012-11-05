@@ -31,7 +31,7 @@ endif
 
 OPTFLAGS = -O3 -ffast-math -mtune=core2
 FLAGS += -ggdb  -Wall -Wextra -MMD $(OPTFLAGS) -I/usr/include/suitesparse
-CFLAGS = $(FLAGS) --std=gnu99
+CFLAGS += $(FLAGS) --std=gnu99
 
 LDLIBS += -lcholmod
 LDLIBS += -lm
