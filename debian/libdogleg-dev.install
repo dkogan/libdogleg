@@ -1,3 +1,5 @@
-usr/include/*
-usr/lib/lib*.a
-usr/lib/lib*.so
+#!/usr/bin/dh-exec
+
+dogleg.h /usr/include
+lib*.a usr/lib/${DEB_HOST_MULTIARCH}
+lib*.so usr/lib/${DEB_HOST_MULTIARCH}

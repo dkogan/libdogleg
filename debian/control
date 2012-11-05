@@ -1,33 +1,58 @@
 Source: libdogleg
+Section: science
 Priority: extra
-Maintainer: Dima Kogan <dima@secretsauce.net>
-Build-Depends: debhelper (>= 7.0.50~), libsuitesparse-dev | libsuitesparse-metis-dev, perl
-Standards-Version: 3.9.2
+Build-Depends: debhelper (>= 9), dh-exec, libsuitesparse-dev | libsuitesparse-metis-dev
+Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.debian.org>
+Uploaders: Dima Kogan <dima@secretsauce.net>
+Standards-Version: 3.9.4
+Homepage: https://github.com/dkogan/libdogleg
+Vcs-Git: git://git.debian.org/git/debian-science/packages/libdogleg.git
+Vcs-Browser: http://git.debian.org/?p=debian-science/packages/libdogleg.git
+
+Package: libdogleg2
 Section: libs
-Homepage: https://github.com/Oblong/libdogleg
-Vcs-Git: git://github.com/Oblong/libdogleg.git
-Vcs-Browser: https://github.com/Oblong/libdogleg/commits/master
+Architecture: any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
+ Solves unconstrained nonlinear least squares problems using Powell's dog-leg
+ method. The user specifies a callback C function that returns the value and
+ gradients of the model function at a particular operating point. This library
+ takes a series of dog-leg steps to find a local minimum of the residual
+ surface.
+ .
+ This library works with sparse matrices, which makes it suitable for
+ efficiently solving very large problems.
+
 
 Package: libdogleg-dev
 Section: libdevel
 Architecture: any
 Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
-Description: Dev files for libdogleg2
- Development files for Powell's dog-leg optimization routine for sparse
- matrices.
-
-Package: libdogleg2
-Section: libs
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Powell's dog-leg optimization routine for sparse matrices.
- Implements Powell's dog-leg optimization routine for sparse matrices. Solves
- unconstrained non-linear data-fitting problems
+Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
+ Solves unconstrained nonlinear least squares problems using Powell's dog-leg
+ method. The user specifies a callback C function that returns the value and
+ gradients of the model function at a particular operating point. This library
+ takes a series of dog-leg steps to find a local minimum of the residual
+ surface.
+ .
+ This library works with sparse matrices, which makes it suitable for
+ efficiently solving very large problems.
+ .
+ Development files
 
 Package: libdogleg2-dbg
 Section: debug
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libdogleg2
-Description: Powell's dog-leg optimization routine for sparse matrices. Debug symbols
- Implements Powell's dog-leg optimization routine for sparse matrices. Solves
- unconstrained non-linear data-fitting problems
+Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version})
+Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
+ Solves unconstrained nonlinear least squares problems using Powell's dog-leg
+ method. The user specifies a callback C function that returns the value and
+ gradients of the model function at a particular operating point. This library
+ takes a series of dog-leg steps to find a local minimum of the residual
+ surface.
+ .
+ This library works with sparse matrices, which makes it suitable for
+ efficiently solving very large problems.
+ .
+ Debug symbols
