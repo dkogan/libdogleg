@@ -1,2 +1,2 @@
 version = 3
-https://github.com/dkogan/libdogleg/tags .*/tarball/v(\d[\d\.]+)
+https://github.com/dkogan/libdogleg/tags .*/libdogleg/archive/v(\d[\d\.]+).tar.gz
