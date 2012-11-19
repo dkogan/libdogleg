@@ -3,9 +3,7 @@ API_VERSION = 2
 OS = $(shell uname -s)
 
 # I parse the version from the changelog. This version is generally something
-# like 0.04-1 Here 0.04 is the main version and 1 is the debian package
-# version. I only use the main version and strip leading 0s, so the above
-# becomes 0.4
+# like 0.04 .I strip leading 0s, so the above becomes 0.4
 VERSION := $(shell sed -n 's/.*(\([0-9\.]*[0-9]\).*).*/\1/; s/\.0*/./g; p; q;' Changes)
 
 ifeq ($(strip $(VERSION)),)
