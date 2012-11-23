@@ -1,6 +1,6 @@
 Source: libdogleg
 Section: science
-Priority: extra
+Priority: optional
 Build-Depends: debhelper (>= 9), dh-exec, libsuitesparse-dev | libsuitesparse-metis-dev
 Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.debian.org>
 Uploaders: Dima Kogan <dima@secretsauce.net>
@@ -43,6 +43,7 @@ Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
 
 Package: libdogleg2-dbg
 Section: debug
+Priority: extra
 Architecture: any
 Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version})
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
