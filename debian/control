@@ -12,6 +12,7 @@ Vcs-Browser: http://git.debian.org/?p=debian-science/packages/libdogleg.git
 Package: libdogleg2
 Section: libs
 Architecture: any
+Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
@@ -28,6 +29,7 @@ Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
 Package: libdogleg-dev
 Section: libdevel
 Architecture: any
+Multi-Arch: same
 Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
  Solves unconstrained nonlinear least squares problems using Powell's dog-leg
@@ -45,6 +47,7 @@ Package: libdogleg2-dbg
 Section: debug
 Priority: extra
 Architecture: any
+Multi-Arch: same
 Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version})
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
  Solves unconstrained nonlinear least squares problems using Powell's dog-leg

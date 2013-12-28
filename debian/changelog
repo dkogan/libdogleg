@@ -1,3 +1,13 @@
+libdogleg (0.08-2~1.gbp60b34a) UNRELEASED; urgency=low
+
+  ** SNAPSHOT build @60b34a626ffcdc88b631bb40454735f27079bc27 **
+
+  * added explicit copyright to the debian/* files
+  * fixed watchfile to work with newer github pages
+  * libdogleg is now Priority: optional
+
+ -- Dima Kogan <dima@secretsauce.net>  Fri, 27 Dec 2013 22:49:13 -0800
+
 libdogleg (0.08-1) unstable; urgency=low
 
   * Initial Debian release (Closes: #692088)

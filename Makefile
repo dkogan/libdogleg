@@ -60,9 +60,11 @@ $(TARGET_SO_SONAME) $(TARGET_SO_BARE): $(TARGET_SO_FULL)
 %-pic.o: %.c
 	$(CC) $(CPPFLAGS) -fPIC $(CFLAGS) -c -o $@ $<
 
+# I want multi-arch:same, so I remove the date and the "automatically-generated"
+# line. This makes sure that multiple builds of the manpage on different arches
+# will produce a bit-identical the same result
 $(MAN_TARGET): README.pod
-	pod2man --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release="libdogleg $(VERSION)" --section=$(MAN_SECTION) $^ $@
-
+	pod2man --date=" " --center="libdogleg: Powell's dogleg method" --name=LIBDOGLEG --release="libdogleg $(VERSION)" --section=$(MAN_SECTION) $^ | grep -v 'Automatically generated.*Pod::Man' > $@
 
 sample: sample.o libdogleg.a
 	$(CC) $^ $(LDLIBS) -o $@
