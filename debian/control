@@ -6,8 +6,8 @@ Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.
 Uploaders: Dima Kogan <dima@secretsauce.net>
 Standards-Version: 3.9.4
 Homepage: https://github.com/dkogan/libdogleg
-Vcs-Git: git://git.debian.org/git/debian-science/packages/libdogleg.git
-Vcs-Browser: http://git.debian.org/?p=debian-science/packages/libdogleg.git
+Vcs-Git: git://anonscm.debian.org/debian-science/packages/libdogleg.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=debian-science/packages/libdogleg.git
 
 Package: libdogleg2
 Section: libs
