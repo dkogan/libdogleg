@@ -1,12 +1,9 @@
-libdogleg (0.08-2~1.gbp60b34a) UNRELEASED; urgency=low
+libdogleg (0.08-2) unstable; urgency=low
 
-  ** SNAPSHOT build @60b34a626ffcdc88b631bb40454735f27079bc27 **
-
-  * added explicit copyright to the debian/* files
-  * fixed watchfile to work with newer github pages
   * libdogleg is now Priority: optional
+  * libdogleg is now Multi-arch:same
 
- -- Dima Kogan <dima@secretsauce.net>  Fri, 27 Dec 2013 22:49:13 -0800
+ -- Dima Kogan <dima@secretsauce.net>  Sun, 12 Jan 2014 23:18:46 -0800
 
 libdogleg (0.08-1) unstable; urgency=low
 
