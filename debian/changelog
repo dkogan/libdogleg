@@ -1,3 +1,9 @@
+libdogleg (0.08-3) unstable; urgency=low
+
+  * Moved all docs, examples to libdogleg-doc (Closes: #735205)
+
+ -- Dima Kogan <dima@secretsauce.net>  Mon, 13 Jan 2014 14:38:58 -0800
+
 libdogleg (0.08-2) unstable; urgency=low
 
   * libdogleg is now Priority: optional
