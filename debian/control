@@ -25,12 +25,30 @@ Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
  This library works with sparse matrices, which makes it suitable for
  efficiently solving very large problems.
 
+Package: libdogleg-doc
+Section: doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
+ Solves unconstrained nonlinear least squares problems using Powell's dog-leg
+ method. The user specifies a callback C function that returns the value and
+ gradients of the model function at a particular operating point. This library
+ takes a series of dog-leg steps to find a local minimum of the residual
+ surface.
+ .
+ This library works with sparse matrices, which makes it suitable for
+ efficiently solving very large problems.
+ .
+ This package contains the documentation
 
 Package: libdogleg-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version}), libsuitesparse-dev | libsuitesparse-metis-dev
+Depends: ${misc:Depends}, libdogleg2 (= ${binary:Version}),
+         libdogleg-doc,
+         libsuitesparse-dev | libsuitesparse-metis-dev
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
  Solves unconstrained nonlinear least squares problems using Powell's dog-leg
  method. The user specifies a callback C function that returns the value and
