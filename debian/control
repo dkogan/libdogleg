@@ -30,6 +30,8 @@ Section: doc
 Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends}
+Replaces: libdogleg-dev (<< 0.08-3) 
+Breaks: libdogleg-dev (<< 0.08-3) 
 Description: Powell's dog-leg nonlinear least squares solver for sparse matrices
  Solves unconstrained nonlinear least squares problems using Powell's dog-leg
  method. The user specifies a callback C function that returns the value and
