@@ -4,7 +4,7 @@ Priority: optional
 Build-Depends: debhelper (>= 9), dh-exec, libsuitesparse-dev | libsuitesparse-metis-dev
 Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.debian.org>
 Uploaders: Dima Kogan <dima@secretsauce.net>
-Standards-Version: 3.9.4
+Standards-Version: 3.9.6
 Homepage: https://github.com/dkogan/libdogleg
 Vcs-Git: git://anonscm.debian.org/debian-science/packages/libdogleg.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=debian-science/packages/libdogleg.git
