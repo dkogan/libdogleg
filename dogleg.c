@@ -12,6 +12,11 @@
 #endif
 #include "dogleg.h"
 
+#if (CHOLMOD_VERSION > (CHOLMOD_VER_CODE(2,2)))
+#include <cholmod_function.h>
+#endif
+
+
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { fprintf(stderr, "ASSERTION FAILED at %s:%d\n", __FILE__, __LINE__); exit(1); } } while(0)
 
@@ -721,15 +726,20 @@ static int cholmod_error_callback(const char* s, ...)
   return ret;
 }
 
-static void set_cholmod_options(cholmod_common* common)
+static void set_cholmod_options(cholmod_common* cc)
 {
   // I want to use LGPL parts of CHOLMOD only, so I turn off the supernodal routines. This gave me a
   // 25% performance hit in the solver for a particular set of optical calibration data.
-  common->supernodal = 0;
+  cc->supernodal = 0;
 
 
   // I want all output to go to STDERR, not STDOUT
-  common->print_function = cholmod_error_callback;
+#if (CHOLMOD_VERSION <= (CHOLMOD_VER_CODE(2,2)))
+  cc->print_function = cholmod_error_callback;
+#else
+  CHOLMOD_FUNCTION_DEFAULTS ;
+  CHOLMOD_FUNCTION_PRINTF(cc) = cholmod_error_callback;
+#endif
 }
 
 void dogleg_freeContext(dogleg_solverContext_t** ctx)
