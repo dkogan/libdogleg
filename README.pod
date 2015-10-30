@@ -2,6 +2,18 @@
 
 libdogleg - A general purpose sparse optimizer to solve data fitting problems
 
+=head1 NOTICE
+
+If you're considering using this library for new projects, please look at the
+C<ceres> solver instead:
+
+L<http://ceres-solver.org/>
+
+C<libdogleg> is not deprecated, and I will fix bugs as they're reported. However
+C<ceres> is more feature-rich and I<much> more widely used. I consider C<ceres>
+to be a superset of C<libdogleg>, and if C<ceres> was available when I wrote
+C<libdogleg>, I would not have written it.
+
 =head1 DESCRIPTION
 
 This is a library for solving large-scale nonlinear optimization problems. By employing sparse
