@@ -1,3 +1,10 @@
+libdogleg (0.09-2) unstable; urgency=medium
+
+  * Team upload.
+  * Upload to unstable for suitesparse 4.4 transition.
+
+ -- Sébastien Villemot <sebastien@debian.org>  Sat, 21 Nov 2015 16:06:06 +0100
+
 libdogleg (0.09-1) experimental; urgency=medium
 
   * Build now works with both suitesparse 2.2 and 2.4 (Closes: #793764)
