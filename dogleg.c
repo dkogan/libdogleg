@@ -277,9 +277,11 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
                                   CHOLMOD_REAL,
                                   &_cholmod_common);
 
+    p[var] -= GRADTEST_DELTA/2.0;
     (*f)(p, x0, Jt0, cookie);
     p[var] += GRADTEST_DELTA;
     (*f)(p, x,  Jt,  cookie);
+    p[var] -= GRADTEST_DELTA/2.0;
   }
   else
   {
@@ -287,9 +289,11 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
     J_dense0 = malloc( Nmeas * Nstate * sizeof(J_dense[0]) );
 
     dogleg_callback_dense_t* f_dense = (dogleg_callback_dense_t*)f;
+    p[var] -= GRADTEST_DELTA/2.0;
     (*f_dense)(p, x0, J_dense0, cookie);
     p[var] += GRADTEST_DELTA;
     (*f_dense)(p, x,  J_dense,  cookie);
+    p[var] -= GRADTEST_DELTA/2.0;
   }
 
 
