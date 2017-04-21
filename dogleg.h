@@ -1,3 +1,4 @@
+// -*- mode: C; c-basic-offset: 2 -*-
 // Copyright 2011 Oblong Industries
 // License: GNU LGPL <http://www.gnu.org/licenses>.
 
