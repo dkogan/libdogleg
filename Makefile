@@ -34,7 +34,7 @@ OPTFLAGS := $(if $(filter -O%, $(CFLAGS)),,-O3 -ffast-math -mtune=core2)
 FLAGS += -ggdb  -Wall -Wextra -MMD $(OPTFLAGS) -I/usr/include/suitesparse
 CFLAGS += $(FLAGS) --std=gnu99
 
-LDLIBS += -lcholmod
+LDLIBS += -lcholmod -lsuitesparseconfig -llapack
 LDLIBS += -lm
 
 LIB_TARGETS = libdogleg.a $(TARGET_SO_BARE) $(TARGET_SO_FULL) $(TARGET_SO_SONAME)
