@@ -1,6 +1,6 @@
 =head1 NAME
 
-libdogleg - A general purpose sparse optimizer to solve data fitting problems
+libdogleg - A general purpose optimizer to solve data fitting problems
 
 =head1 NOTICE
 
@@ -20,18 +20,22 @@ This is a library for solving large-scale nonlinear optimization problems. By em
 linear algebra, it is taylored for problems that have weak coupling between the optimization
 variables. For appropriately sparse problems this results in I<massive> performance gains.
 
+For smaller problems with dense Jacobians a dense mode is available also. This
+utilizes the same optimization loop as the sparse code, but uses dense linear
+algebra.
+
 The main task of this library is to find the vector B<p> that minimizes
 
 norm2( B<x> )
 
 where B<x> = I<f>(B<p>) is a vector that has higher dimensionality than B<p>. The user passes in a
 callback function (of type C<dogleg_callback_t>) that takes in the vector B<p> and returns the
-vector B<x> and a matrix of derivatives B<J> = dB<f>/dB<p>. B<J> is a matrix with a row for each element
-of I<f> and a column for each element of B<p>. B<J> is a sparse matrix, which results in substantial
-increases in computational efficiency if most entries of B<J> are 0. B<J> is stored row-first in the
-callback routine. libdogleg uses a column-first data representation so it references the transpose
-of B<J> (called B<Jt>). B<J> stored row-first is identical to B<Jt> stored column-first; this is purely a
-naming choice.
+vector B<x> and a matrix of derivatives B<J> = dB<f>/dB<p>. B<J> is a matrix with a row for each
+element of I<f> and a column for each element of B<p>. If B<J> is a sparse matrix, then this library
+can take advantage of that, which results in substantial increases in computational efficiency if
+most entries of B<J> are 0. B<J> is stored row-first in the callback routine. libdogleg uses a
+column-first data representation so it references the transpose of B<J> (called B<Jt>). B<J> stored
+row-first is identical to B<Jt> stored column-first; this is purely a naming choice.
 
 This library implements Powell's dog-leg algorithm to solve the problem. Like the more-widely-known
 Levenberg-Marquardt algorithm, Powell's dog-leg algorithm solves a nonlinear optimization problem by
@@ -68,7 +72,7 @@ are minor.
 
 =head3 dogleg_optimize
 
-This is the main call to the library. Its declared as
+This is the main call to the library for I<sparse> Jacobians. Its declared as
 
  double dogleg_optimize(double* p, unsigned int Nstate,
                         unsigned int Nmeas, unsigned int NJnnz,
@@ -99,6 +103,39 @@ contains the latest operating point values. It also has an active
 C<cholmod_common> structure, which can be reused if more CHOLMOD routines need
 to be called externally. I<If this data is requested, the user is required to
 free it with C<dogleg_freeContext> when done>.
+
+=back
+
+C<dogleg_optimize> returns norm2( B<x> ) at the minimum, or a negative value if an error occurred.
+
+=head3 dogleg_optimize_dense
+
+This is the main call to the library for I<dense> Jacobians. Its declared as
+
+ double dogleg_optimize_dense(double* p, unsigned int Nstate,
+                              unsigned int Nmeas,
+                              dogleg_callback_dense_t* f, void* cookie,
+                              dogleg_solverContext_t** returnContext);
+
+The arguments are almost identical to those in the C<dogleg_optimize> call.
+
+=over
+
+=item * B<p> is the initial estimate of the state vector (and holds the final result)
+
+=item * C<Nstate> specifies the number of optimization variables (elements of B<p>)
+
+=item * C<Nmeas> specifies the number of measurements (elements of B<x>). C<Nmeas E<gt>= Nstate> is a
+requirement
+
+=item * C<f> specifies the callback function that the optimization routine calls to sample the problem
+being solved. Note that this callback has a different type from that in C<dogleg_optimize>
+
+=item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
+
+=item * If not C<NULL>, C<returnContext> can be used to retrieve the full context structure from the
+solver. This can be useful since this structure contains the latest operating point values. I<If
+this data is requested, the user is required to free it with C<dogleg_freeContext> when done>.
 
 =back
 
@@ -146,10 +183,38 @@ developing the program that uses libdogleg.
 
 This function returns nothing, but prints out the test results.
 
+=head3 dogleg_testGradient_dense
+
+Very similar to C<dogleg_testGradient>, but for dense jacobians.
+
+ void dogleg_testGradient_dense(unsigned int var, const double* p0,
+                                unsigned int Nstate, unsigned int Nmeas,
+                                dogleg_callback_dense_t* f, void* cookie);
+
+This function computes the jacobian with center differences and compares the result with the
+jacobian computed by the callback function. It is recommended to do this for every variable while
+developing the program that uses libdogleg.
+
+=over
+
+=item * C<var> is the index of the variable being tested
+
+=item * C<p0> is the state vector B<p> where we're evaluating the jacobian
+
+=item * C<Nstate>, C<NJnnz> are the number of state variables, measurements
+
+=item * C<f> is the callback function, as before
+
+=item * C<cookie> is the user data, as before
+
+=back
+
+This function returns nothing, but prints out the test results.
+
 
 =head3 dogleg_callback_t
 
-The main user callback that specifies the optimization problem has type
+The main user callback that specifies the sparse optimization problem has type
 
  typedef void (dogleg_callback_t)(const double*   p,
                                   double*         x,
@@ -170,6 +235,28 @@ callback routine
 
 =back
 
+=head3 dogleg_callback_dense_t
+
+The main user callback that specifies the dense optimization problem has type
+
+ typedef void (dogleg_callback_dense_t)(const double*   p,
+                                        double*         x,
+                                        double*         J,
+                                        void*           cookie);
+
+=over
+
+=item * B<p> is the current state vector
+
+=item * B<x> is the resulting I<f>(B<p>)
+
+=item * B<J> is dB<f>/dB<p> at B<p>. B<J> is stored row-first, with all the derivatives for the
+first measurement, then all the derivatives for the second measurement and so on.
+
+=item * The C<cookie> is the user-defined arbitrary data passed into C<dogleg_optimize>.
+
+=back
+
 =head3 dogleg_solverContext_t
 
 This is the solver context that can be retrieved through the C<returnContext>
@@ -180,10 +267,14 @@ calling C<dogleg_freeContext> when done. This structure is defined as:
  typedef struct
  {
    cholmod_common  common;
- 
-   dogleg_callback_t* f;
+
+   union
+   {
+     dogleg_callback_t*       f;
+     dogleg_callback_dense_t* f_dense;
+   };
    void*              cookie;
- 
+
    // between steps, beforeStep contains the operating point of the last step.
    // afterStep is ONLY used while making the step. Externally, use beforeStep
    // unless you really know what you're doing
@@ -193,12 +284,24 @@ calling C<dogleg_freeContext> when done. This structure is defined as:
    // The result of the last JtJ factorization performed. Note that JtJ is not
    // necessarily factorized at every step, so this is NOT guaranteed to contain
    // the factorization of the most recent JtJ
-   cholmod_factor*          factorization;
- 
-   // Have I ever seen a singular JtJ? If so, I add a small constant to the
-   // diagonal from that point on. This is a simple and fast way to deal with
-   // singularities. This is suboptimal but works for me for now.
-   int               wasPositiveSemidefinite;
+   union
+   {
+     cholmod_factor* factorization;
+
+     // This is a factorization of JtJ, stored as a packed symmetric matrix
+     // returned by dpptrf('L', ...)
+     double*         factorization_dense;
+   };
+
+   // Have I ever seen a singular JtJ? If so, I add this constant to the diagonal
+   // from that point on. This is a simple and fast way to deal with
+   // singularities. This constant starts at 0, and is increased every time a
+   // singular JtJ is encountered. This is suboptimal but works for me for now.
+   double                   lambda;
+
+   // Are we using sparse math (cholmod)?
+   int                      is_sparse;
+   int                      Nstate, Nmeasurements;
  } dogleg_solverContext_t;
 
 Some of the members are copies of the data passed into C<dogleg_optimize>; some
@@ -227,18 +330,26 @@ computed at every step and are thus always valid.
    double*         p;
    double*         x;
    double          norm2_x;
-   cholmod_sparse* Jt;
+   union
+   {
+     cholmod_sparse* Jt;
+     double*         J_dense; // row-first: grad0, grad1, grad2, ...
+   };
    double*         Jt_x;
- 
+
    // the cached update vectors. It's useful to cache these so that when a step is rejected, we can
    // reuse these when we retry
    double*        updateCauchy;
-   cholmod_dense* updateGN_cholmoddense;
+   union
+   {
+     cholmod_dense* updateGN_cholmoddense;
+     double*        updateGN_dense;
+   };
    double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
- 
+
    // whether the current update vectors are correct or not
    int updateCauchy_valid, updateGN_valid;
- 
+
    int didStepToEdgeOfTrustRegion;
  } dogleg_operatingPoint_t;
 
