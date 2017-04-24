@@ -454,6 +454,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
       // singular JtJ. Raise lambda and go again
       if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
       else                    ctx->lambda *= 10.0;
+      ASSERT( isfinite(ctx->lambda) );
 
       if( DOGLEG_DEBUG )
         SAY( "singular JtJ. Have rank/full rank: %zd/%d. Adding %g I from now on",
