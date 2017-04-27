@@ -109,12 +109,22 @@ static double inner(const double* x, const double* y, unsigned int n)
     result += x[i]*y[i];
   return result;
 }
+__attribute__((unused))
 static double inner_withstride(const double* x, const double* y, unsigned int n, unsigned int stride)
 {
   double result = 0;
   for(unsigned int i=0; i<n*stride; i+=stride)
     result += x[i]*y[i];
   return result;
+}
+// JtJ += outer(j,j). JtJ is packed, upper-triangular (lower-triangular as far
+// as LAPACK is concerned)
+static void accum_outerproduct_packed( double* JtJ, const double* j, int n )
+{
+  int iJtJ=0;
+  for(int i1=0; i1<n; i1++)
+    for(int i0=i1; i0<n; i0++, iJtJ++)
+      JtJ[iJtJ] += j[i0]*j[i1];
 }
 static void vec_copy_scaled(double* dest,
                             const double* v, double scale, int n)
@@ -486,10 +496,30 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
   {
     while(1)
     {
-      // I construct my JtJ. JtJ is packed and stored row-first
+      // I construct my JtJ. JtJ is packed and stored row-first. I have two
+      // equivalent implementations. The one enabled here is maybe a bit faster,
+      // but it's definitely clearer
+#if 1
+      memset(ctx->factorization_dense,
+             0,
+             ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
+      for(int i=0; i<ctx->Nmeasurements; i++)
+        accum_outerproduct_packed( ctx->factorization_dense, &point->J_dense[ctx->Nstate*i],
+                                   ctx->Nstate );
+      if( ctx->lambda > 0.0 )
+      {
+        int iJtJ=0;
+        for(int i1=0; i1<ctx->Nstate; i1++)
+        {
+          ctx->factorization_dense[iJtJ] += ctx->lambda;
+          iJtJ                           += ctx->Nstate-i1;
+        }
+      }
+#else
       int iJtJ = 0;
       for(int i1=0; i1<ctx->Nstate; i1++)
       {
+        #error this does not work. overwritten in the following loop
         ctx->factorization_dense[iJtJ] += ctx->lambda;
 
         for(int i0=i1; i0<ctx->Nstate; i0++, iJtJ++)
@@ -498,6 +528,8 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
                                                              ctx->Nmeasurements,
                                                              ctx->Nstate);
       }
+#endif
+
 
 
       int info;
