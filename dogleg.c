@@ -262,8 +262,8 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   cholmod_common _cholmod_common;
   cholmod_sparse* Jt;
   cholmod_sparse* Jt0;
-  double* J_dense;
-  double* J_dense0;
+  double* J_dense  = NULL; // setting to NULL to pacify compiler's "uninitialized" warnings
+  double* J_dense0 = NULL; // setting to NULL to pacify compiler's "uninitialized" warnings
 
 
   if( is_sparse )
