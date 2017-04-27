@@ -419,7 +419,6 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
   // I already have this data, so don't need to recompute
   if(point->updateGN_valid)
     return;
-  point->updateGN_valid = 1;
 
   if( ctx->is_sparse )
   {
@@ -562,6 +561,8 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
 
   if( DOGLEG_DEBUG )
     SAY( "gn step size %.6g", sqrt(point->updateGN_lensq));
+
+  point->updateGN_valid = 1;
 }
 
 static void computeInterpolatedUpdate(double*                  update_dogleg,
