@@ -414,7 +414,7 @@ int dpptrs_(char* uplo, int* n, int* nrhs,
             int uplo_len);
 
 
-static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
+void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
   if(point->updateGN_valid)
@@ -429,23 +429,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
       ctx->factorization = cholmod_analyze(point->Jt, &ctx->common);
       ASSERT(ctx->factorization != NULL);
     }
-  }
-  else
-  {
-    if(ctx->factorization_dense == NULL)
-    {
-      // Need to store symmetric JtJ, so I only need one triangle of it
-      ctx->factorization_dense = malloc( ctx->Nstate * (ctx->Nstate+1) / 2 *
-                                         sizeof( ctx->factorization_dense[0]));
-      ASSERT(ctx->factorization_dense);
-    }
-  }
 
-  // try to factorize the matrix directly. If it's singular, add a small
-  // constant to the diagonal. This constant gets larger if we keep being
-  // singular
-  if( ctx->is_sparse )
-  {
     while(1)
     {
       if( ctx->lambda == 0.0 )
@@ -469,30 +453,17 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
         SAY( "singular JtJ. Have rank/full rank: %zd/%d. Adding %g I from now on",
              ctx->factorization->minor, ctx->Nstate, ctx->lambda);
     }
-
-    // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
-    cholmod_dense Jt_x_dense = {.nrow  = ctx->Nstate,
-                                .ncol  = 1,
-                                .nzmax = ctx->Nstate,
-                                .d     = ctx->Nstate,
-                                .x     = point->Jt_x,
-                                .xtype = CHOLMOD_REAL,
-                                .dtype = CHOLMOD_DOUBLE};
-
-    if(point->updateGN_cholmoddense != NULL)
-      cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
-
-    point->updateGN_cholmoddense = cholmod_solve(CHOLMOD_A,
-                                                 ctx->factorization,
-                                                 &Jt_x_dense,
-                                                 &ctx->common);
-    vec_negate(point->updateGN_cholmoddense->x,
-               ctx->Nstate); // should be more efficient than this later
-
-    point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
   }
   else
   {
+    if(ctx->factorization_dense == NULL)
+    {
+      // Need to store symmetric JtJ, so I only need one triangle of it
+      ctx->factorization_dense = malloc( ctx->Nstate * (ctx->Nstate+1) / 2 *
+                                         sizeof( ctx->factorization_dense[0]));
+      ASSERT(ctx->factorization_dense);
+    }
+
     while(1)
     {
       // I construct my JtJ. JtJ is packed and stored row-first. I have two
@@ -546,7 +517,45 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
       if( DOGLEG_DEBUG )
         SAY( "singular JtJ. Adding %g I from now on", ctx->lambda);
     }
+  }
+}
 
+static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
+{
+  // I already have this data, so don't need to recompute
+  if(point->updateGN_valid)
+    return;
+
+  dogleg_computeJtJfactorization(point, ctx);
+
+  // try to factorize the matrix directly. If it's singular, add a small
+  // constant to the diagonal. This constant gets larger if we keep being
+  // singular
+  if( ctx->is_sparse )
+  {
+    // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
+    cholmod_dense Jt_x_dense = {.nrow  = ctx->Nstate,
+                                .ncol  = 1,
+                                .nzmax = ctx->Nstate,
+                                .d     = ctx->Nstate,
+                                .x     = point->Jt_x,
+                                .xtype = CHOLMOD_REAL,
+                                .dtype = CHOLMOD_DOUBLE};
+
+    if(point->updateGN_cholmoddense != NULL)
+      cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
+
+    point->updateGN_cholmoddense = cholmod_solve(CHOLMOD_A,
+                                                 ctx->factorization,
+                                                 &Jt_x_dense,
+                                                 &ctx->common);
+    vec_negate(point->updateGN_cholmoddense->x,
+               ctx->Nstate); // should be more efficient than this later
+
+    point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
+  }
+  else
+  {
     memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
     int info;
     dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},

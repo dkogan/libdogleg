@@ -108,6 +108,13 @@ double dogleg_optimize_dense(double* p, unsigned int Nstate,
                              dogleg_callback_dense_t* f, void* cookie,
                              dogleg_solverContext_t** returnContext);
 
+// Compute the cholesky decomposition of JtJ. This function is only exposed if
+// you need to touch libdogleg internals via returnContext. Sometimes after
+// computing an optimization you want to do stuff with the factorization of JtJ,
+// and this call ensures that the factorization is available. Most people don't
+// need this function. If the comment wasn't clear, you don't need this
+// function.
+void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
 
 void dogleg_testGradient(unsigned int var, const double* p0,
                          unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,

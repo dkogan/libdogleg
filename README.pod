@@ -101,8 +101,9 @@ being solved
 context structure from the solver. This can be useful since this structure
 contains the latest operating point values. It also has an active
 C<cholmod_common> structure, which can be reused if more CHOLMOD routines need
-to be called externally. I<If this data is requested, the user is required to
-free it with C<dogleg_freeContext> when done>.
+to be called externally. You usually want C<returnContext-E<gt>beforeStep>. I<If
+this data is requested, the user is required to free it with
+C<dogleg_freeContext> when done>.
 
 =back
 
@@ -133,9 +134,11 @@ being solved. Note that this callback has a different type from that in C<dogleg
 
 =item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
 
-=item * If not C<NULL>, C<returnContext> can be used to retrieve the full context structure from the
-solver. This can be useful since this structure contains the latest operating point values. I<If
-this data is requested, the user is required to free it with C<dogleg_freeContext> when done>.
+=item * If not C<NULL>, C<returnContext> can be used to retrieve the full
+context structure from the solver. This can be useful since this structure
+contains the latest operating point values. You usually want
+C<returnContext-E<gt>beforeStep>. I<If this data is requested, the user is
+required to free it with C<dogleg_freeContext> when done>.
 
 =back
 
@@ -151,6 +154,32 @@ If a pointer to a context is not requested (by passing C<returnContext = NULL>
 to C<dogleg_optimize>), libdogleg calls this routine automatically. If the user
 I<did> retrieve this pointer, though, it must be freed with
 C<dogleg_freeContext> when the user is finished.
+
+=head3 dogleg_computeJtJfactorization
+
+Computes the cholesky decomposition of JtJ. This function is only exposed if you
+need to touch libdogleg internals via returnContext. Sometimes after computing
+an optimization you want to do stuff with the factorization of JtJ, and this
+call ensures that the factorization is available. Most people don't need this
+function. If the comment wasn't clear, you don't need this function.
+
+This is declared as
+
+ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point,
+                                     dogleg_solverContext_t* ctx);
+
+The arguments are
+
+=over
+
+=item * C<point> is the operating point of the system. Generally this will be
+C<returnContext-E<gt>beforeStep> where C<returnContext> is from one of the
+C<dogleg_optimize_...> functions.
+
+=item * C<ctx> is the dogleg context. Generally this will be C<returnContext>
+from one of the C<dogleg_optimize_...> functions
+
+=back
 
 =head3 dogleg_testGradient
 
