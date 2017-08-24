@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <cholmod.h>
+#include <suitesparse/cholmod.h>
 
 typedef void (dogleg_callback_t)(const double*   p,
                                  double*         x,
