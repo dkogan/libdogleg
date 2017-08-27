@@ -1,3 +1,12 @@
+libdogleg (0.13)
+
+  * Updated cholmod #includes to work without any -I flags
+    This shouldn't break any existing code, since the -I flags become
+    unnecessary, but benign
+  * Clarified gradient reporting
+
+ -- Dima Kogan <dima@secretsauce.net>  Sun, 27 Aug 2017 16:03:49 -0700
+
 libdogleg (0.12)
 
   * Exposed a function to compute the Cholesky factorization of JtJ
