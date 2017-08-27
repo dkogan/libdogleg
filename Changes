@@ -1,16 +1,16 @@
-libdogleg (0.12) unstable; urgency=medium
+libdogleg (0.12)
 
   * Exposed a function to compute the Cholesky factorization of JtJ
 
  -- Dima Kogan <dima@secretsauce.net>  Mon, 01 May 2017 18:50:39 -0700
 
-libdogleg (0.11) unstable; urgency=medium
+libdogleg (0.11)
 
   * I barf if factorization fails for with a way-too-huge lambda
 
  -- Dima Kogan <dima@secretsauce.net>  Mon, 01 May 2017 18:50:20 -0700
 
-libdogleg (0.10) unstable; urgency=medium
+libdogleg (0.10)
 
   * Improved diagnostic printing: no console output if no errors and if no
     debug logging is requested
