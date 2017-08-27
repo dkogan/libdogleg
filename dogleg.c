@@ -310,23 +310,23 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   for(unsigned int i=0; i<Nmeas; i++)
   {
     // estimated gradients at the midpoint between x and x0
-    double gObs = (x[i] - x0[i]) / GRADTEST_DELTA;
-    double gRep;
+    double g_observed = (x[i] - x0[i]) / GRADTEST_DELTA;
+    double g_reported;
     if( is_sparse )
-      gRep = (getGrad(var, i, Jt0) + getGrad(var, i, Jt)) / 2.0;
+      g_reported = (getGrad(var, i, Jt0) + getGrad(var, i, Jt)) / 2.0;
     else
-      gRep = (getGrad_dense(var, i, J_dense0, Nstate) + getGrad_dense(var, i, J_dense, Nstate)) / 2.0;
+      g_reported = (getGrad_dense(var, i, J_dense0, Nstate) + getGrad_dense(var, i, J_dense, Nstate)) / 2.0;
 
-    if(isnan(gRep))
+    if(isnan(g_reported))
     {
-      if( gObs != 0 )
-        printf("var,meas %d,%d: no reported gradient, but observed %.6g\n", var, i, gObs);
+      if( g_observed != 0 )
+        printf("var,meas %d,%d: no reported gradient, but observed %.6g\n", var, i, g_observed);
 
       continue;
     }
 
     printf("var,meas %d,%d: reported: %.6g, observed: %.6g, err: %.6g, relativeerr: %.6g\n", var, i,
-           gRep, gObs, fabs(gRep - gObs), fabs(gRep - gObs) / ( (fabs(gRep) + fabs(gObs)) / 2.0 ) );
+           g_reported, g_observed, fabs(g_reported - g_observed), fabs(g_reported - g_observed) / ( (fabs(g_reported) + fabs(g_observed)) / 2.0 ) );
   }
 
   if( is_sparse )
