@@ -235,7 +235,8 @@ static double getGrad(unsigned int var, int meas, const cholmod_sparse* Jt)
       return X(Jt,i);
   }
 
-  return nan("nogradient");
+  // This gradient is not in my sparse matrix, so its value is 0.0
+  return 0.0;
 }
 static double getGrad_dense(unsigned int var, int meas, const double* J, int Nstate)
 {
@@ -317,16 +318,13 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
     else
       g_reported = (getGrad_dense(var, i, J_dense0, Nstate) + getGrad_dense(var, i, J_dense, Nstate)) / 2.0;
 
-    if(isnan(g_reported))
-    {
-      if( g_observed != 0 )
-        printf("var,meas %d,%d: no reported gradient, but observed %.6g\n", var, i, g_observed);
+    double g_sum_abs = fabs(g_reported) + fabs(g_observed);
+    double g_abs_err = fabs(g_reported - g_observed);
 
-      continue;
-    }
+    printf( "var,meas %d,%d: reported: %.6g, observed: %.6g, err: %.6g, relativeerr: %.6g\n", var, i,
+            g_reported, g_observed, g_abs_err,
 
-    printf("var,meas %d,%d: reported: %.6g, observed: %.6g, err: %.6g, relativeerr: %.6g\n", var, i,
-           g_reported, g_observed, fabs(g_reported - g_observed), fabs(g_reported - g_observed) / ( (fabs(g_reported) + fabs(g_observed)) / 2.0 ) );
+            g_sum_abs == 0.0 ? 0.0 : (g_abs_err / ( g_sum_abs / 2.0 )));
   }
 
   if( is_sparse )
