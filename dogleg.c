@@ -267,6 +267,8 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   double* J_dense0 = NULL; // setting to NULL to pacify compiler's "uninitialized" warnings
 
 
+  printf("# ivar imeasurement gradient_reported gradient_observed error error_relative\n");
+
   if( is_sparse )
   {
     if( !cholmod_start(&_cholmod_common) )
@@ -321,7 +323,7 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
     double g_sum_abs = fabs(g_reported) + fabs(g_observed);
     double g_abs_err = fabs(g_reported - g_observed);
 
-    printf( "var,meas %d,%d: reported: %.6g, observed: %.6g, err: %.6g, relativeerr: %.6g\n", var, i,
+    printf( "%d %d %.6g %.6g %.6g %.6g\n", var, i,
             g_reported, g_observed, g_abs_err,
 
             g_sum_abs == 0.0 ? 0.0 : (g_abs_err / ( g_sum_abs / 2.0 )));
