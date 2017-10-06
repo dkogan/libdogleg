@@ -19,7 +19,8 @@
 #endif
 
 
-#define SAY(fmt, ...) fprintf(stderr, "libdogleg at %s:%d: " fmt "\n", __FILE__, __LINE__, ## __VA_ARGS__)
+#define SAY_NONEWLINE(fmt, ...) fprintf(stderr, "libdogleg at %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
+#define SAY(fmt, ...)           do {  SAY_NONEWLINE(fmt, ## __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x "is not true"); exit(1); } } while(0)
@@ -969,7 +970,7 @@ static void freeOperatingPoint(dogleg_operatingPoint_t** point, cholmod_common* 
 
 static int cholmod_error_callback(const char* s, ...)
 {
-  fprintf(stderr, "libdogleg: ");
+  SAY_NONEWLINE("");
 
   va_list ap;
   va_start(ap, s);
