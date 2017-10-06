@@ -140,24 +140,10 @@ static void vec_add(double* dest,
   for(int i=0; i<n; i++)
     dest[i] = v0[i] + v1[i];
 }
-static void vec_sub(double* dest,
-                    const double* v0, const double* v1, int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = v0[i] - v1[i];
-}
 static void vec_negate(double* v, int n)
 {
   for(int i=0; i<n; i++)
     v[i] *= -1.0;
-}
-// computes a + k*(b-a)
-static void vec_interpolate(double* dest,
-                            const double* a, double k, const double* b_minus_a,
-                            int n)
-{
-  for(int i=0; i<n; i++)
-    dest[i] = a[i] + k*b_minus_a[i];
 }
 
 // It would be nice to use the CHOLMOD implementation of these, but they're
@@ -600,11 +586,17 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   double        norm2a = point->updateCauchy_lensq;
   const double* a      = point->updateCauchy;
   const double* b      = ctx->is_sparse ? point->updateGN_cholmoddense->x : point->updateGN_dense;
-  double        a_minus_b[ctx->Nstate];
 
-  vec_sub(a_minus_b, a, b, ctx->Nstate);
-  double l2           = norm2(a_minus_b,    ctx->Nstate);
-  double neg_c        = inner(a_minus_b, a, ctx->Nstate);
+  double l2    = 0.0;
+  double neg_c = 0.0;
+  for(int i=0; i<ctx->Nstate; i++)
+  {
+    double d = a[i] - b[i];
+
+    l2    += d*d;
+    neg_c += d*a[i];
+  }
+
   double discriminant = neg_c*neg_c - l2* (norm2a - dsq);
   if(discriminant < 0.0)
   {
@@ -613,9 +605,8 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   }
   double k = (neg_c + sqrt(discriminant))/l2;
 
-  // I can rehash this to not store this data array at all, but it's clearer
-  // to
-  vec_interpolate(update_dogleg, a, -k, a_minus_b, ctx->Nstate);
+  for(int i=0; i<ctx->Nstate; i++)
+    update_dogleg[i] = a[i] + k*(b[i] - a[i]);
 
   if( DOGLEG_DEBUG )
   {
