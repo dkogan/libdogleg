@@ -999,7 +999,7 @@ static void set_cholmod_options(cholmod_common* cc)
 void dogleg_freeContext(dogleg_solverContext_t** ctx)
 {
   freeOperatingPoint(&(*ctx)->beforeStep, (*ctx)->is_sparse ? &(*ctx)->common : NULL);
-  freeOperatingPoint(&(*ctx)->afterStep , (*ctx)->is_sparse ? &(*ctx)->common : NULL);
+  freeOperatingPoint(&(*ctx)->afterStep,  (*ctx)->is_sparse ? &(*ctx)->common : NULL);
 
   if( (*ctx)->is_sparse )
   {
