@@ -611,7 +611,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   if( DOGLEG_DEBUG )
   {
     double updateNorm = norm2(update_dogleg, ctx->Nstate);
-    SAY( "k %.6g, norm %.6g", k, sqrt(updateNorm));
+    SAY( "k_cauchy_to_gn %.6g, norm %.6g", k, sqrt(updateNorm));
   }
 }
 
@@ -812,14 +812,13 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   {
     if( DOGLEG_DEBUG )
     {
-      SAY( "\n\n");
-      SAY( "step %d", stepCount );
+      SAY( "================= step %d", stepCount );
     }
 
     while(1)
     {
       if( DOGLEG_DEBUG )
-        SAY("");
+        SAY("--------");
 
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
