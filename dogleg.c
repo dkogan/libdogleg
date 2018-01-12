@@ -371,7 +371,7 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
   // This is proportional to Jt_x, which is thus the steepest ascent direction.
   //
   // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
-  // point is where F(k) is at a minumum:
+  // point is where F(k) is at a minimum:
   // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
   // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
   // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
