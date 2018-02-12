@@ -1,3 +1,10 @@
+libdogleg (0.14)
+
+  * standardized CHOLMOD error messages
+  * gradient-testing reports are now printed in an easy-to-parse vnlog
+
+ -- Dima Kogan <dima@secretsauce.net>  Mon, 12 Feb 2018 10:55:44 -0800
+
 libdogleg (0.13)
 
   * Updated cholmod #includes to work without any -I flags
