@@ -117,6 +117,8 @@ double dogleg_optimize_dense(double* p, unsigned int Nstate,
 // function.
 void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
 
+// Generates a plain text table that contains gradient checks. This table can be
+// easily parsed with "vnlog" tools
 void dogleg_testGradient(unsigned int var, const double* p0,
                          unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
                          dogleg_callback_t* f, void* cookie);

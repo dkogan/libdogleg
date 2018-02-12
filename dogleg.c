@@ -255,6 +255,7 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   double* J_dense0 = NULL; // setting to NULL to pacify compiler's "uninitialized" warnings
 
 
+  // This is a plain text table, that can be easily parsed with "vnlog" tools
   printf("# ivar imeasurement gradient_reported gradient_observed error error_relative\n");
 
   if( is_sparse )
