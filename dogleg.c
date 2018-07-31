@@ -1,12 +1,13 @@
 // -*- mode: C; c-basic-offset: 2 -*-
 // Copyright 2011 Oblong Industries
-//           2017 Dima Kogan <dima@secretsauce.net>
+//           2017-2018 Dima Kogan <dima@secretsauce.net>
 // License: GNU LGPL <http://www.gnu.org/licenses>.
 
 #include <stdio.h>
 #include <stdarg.h>
 #include <math.h>
 #include <string.h>
+#include <float.h>
 #ifdef __APPLE__
 #include <malloc/malloc.h>
 #else
@@ -1085,4 +1086,453 @@ double dogleg_optimize_dense(double* p, unsigned int Nstate,
 {
   return _dogleg_optimize(p, Nstate, Nmeas, 0, (dogleg_callback_t*)f,
                           cookie, returnContext);
+}
+
+
+
+
+
+
+
+// Computes pinv(J) for a subset of measurements: inv(JtJ) *
+// Jt[imeasurement0..imeasurement0+N-1]. Returns false if something failed.
+// ASSUMES THAT THE CHOLESKY FACTORIZATION HAS ALREADY BEEN COMPUTED.
+//
+// This function is experimental, and subject to change
+static bool pseudoinverse_J_dense(// output
+                                  double* out,
+
+                                  // inputs
+                                  const dogleg_operatingPoint_t* point,
+                                  const dogleg_solverContext_t* ctx,
+                                  int i_meas0, int NmeasInChunk)
+{
+  int info;
+  memcpy(out,
+         &point->J_dense[i_meas0*ctx->Nstate],
+         NmeasInChunk*ctx->Nstate*sizeof(double));
+  dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &NmeasInChunk,
+          ctx->factorization_dense,
+          out,
+          &(int){ctx->Nstate}, &info, 1);
+  return info==0;
+}
+
+// Computes pinv(J) for a subset of measurements: inv(JtJ) *
+// Jt[imeasurement0..imeasurement0+N-1]. Returns false if something failed.
+// ASSUMES THAT THE CHOLESKY FACTORIZATION HAS ALREADY BEEN COMPUTED.
+//
+// allocates memory, returns NULL on failure. ON SUCCESS, THE CALLER IS
+// RESPONSIBLE FOR FREEING THE RETURNED MEMORY
+//
+// This function is experimental, and subject to change
+static cholmod_dense* pseudoinverse_J_sparse(// inputs
+                                             const dogleg_operatingPoint_t* point,
+                                             dogleg_solverContext_t* ctx,
+                                             int i_meas0, int NmeasInChunk,
+
+                                             // Pre-allocated array for the
+                                             // right-hand-side. This will be used as a
+                                             // workspace. Create this like so:
+                                             //
+                                             //   cholmod_allocate_dense( Nstate,
+                                             //                           NmeasInChunk,
+                                             //                           Nstate,
+                                             //                           CHOLMOD_REAL,
+                                             //                           &ctx->common );
+
+                                             cholmod_dense* Jt_chunk)
+{
+  // I'm solving JtJ x = b where J is sparse, b is sparse, but x ends up dense.
+  // cholmod doesn't have functions for this exact case. so I use the
+  // dense-sparse-dense function (cholmod_solve), and densify the input. Instead
+  // of sparse-sparse-sparse and the densifying the output (cholmod_spsolve).
+  // This feels like it'd be more efficient
+
+  memset( Jt_chunk->x, 0, Jt_chunk->nrow*Jt_chunk->ncol*sizeof(double) );
+  int Jt_chunk_ncol_backup = Jt_chunk->ncol;
+  for(int i_meas=0; i_meas<NmeasInChunk; i_meas++)
+  {
+    if( i_meas0 + i_meas >= (int)ctx->Nmeasurements )
+    {
+      // at the end, we could have one chunk with less that chunk_size
+      // columns
+      Jt_chunk->ncol = i_meas;
+      break;
+    }
+
+    for(unsigned int i0=P(point->Jt, i_meas0+i_meas); i0<P(point->Jt, i_meas0+i_meas+1); i0++)
+    {
+      int irow = I(point->Jt,i0);
+      double x = X(point->Jt,i0);
+      ((double*)Jt_chunk->x)[irow + i_meas*Jt_chunk->nrow] = x;
+    }
+  }
+
+  // solve inv(JtJ)Jt[slice]
+  cholmod_dense* pinv =
+    cholmod_solve(CHOLMOD_A,
+                  ctx->factorization,
+                  Jt_chunk,
+                  &ctx->common);
+  Jt_chunk->ncol = Jt_chunk_ncol_backup;
+  return pinv;
+}
+
+static void accum_outlierness_factor(double* factors,
+                                     const double* x,
+                                     double jt_invJtJ_j,
+                                     int i_measurement,
+                                     int Nmeasurements)
+{
+  double denom = 1.0 - jt_invJtJ_j;
+  if( fabs(denom) < 1e-8 )
+    factors[i_measurement] = DBL_MAX; // definitely an outlier
+  else
+    factors[i_measurement] =
+      x[i_measurement]*x[i_measurement]
+      / (denom * (double)Nmeasurements);
+}
+
+static bool getOutliernessFactors_dense( // output
+                                        double* factors, // Nmeasurements factors
+
+                                        // inputs
+                                        const dogleg_operatingPoint_t* point,
+                                        dogleg_solverContext_t* ctx )
+{
+  // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
+  // chunks of 4 too. I pass it rows of J, 4 at a time
+  const int chunk_size = 4;
+
+  int  Nstate        = ctx->Nstate;
+  int  Nmeasurements = ctx->Nmeasurements;
+  bool result        = false;
+
+  double* invJtJ_Jt = malloc(Nstate*chunk_size*sizeof(double));
+  if(invJtJ_Jt == NULL)
+  {
+    SAY("Couldn't allocate invJtJ_Jt!");
+    goto done;
+  }
+
+
+  // I now have inv(JtJ)*j for ALL my j. I compute the outlier factor for each
+  // measurement
+  int i_measurement_valid_chunk_start = -1;
+  int i_measurement_valid_chunk_last  = -1;
+  for( int i_measurement=0; i_measurement<Nmeasurements; i_measurement++)
+  {
+    if( i_measurement > i_measurement_valid_chunk_last )
+    {
+      bool pinvresult = pseudoinverse_J_dense(invJtJ_Jt, point, ctx,
+                                              i_measurement, chunk_size);
+      if(!pinvresult)
+      {
+        SAY("Couldn't compute pinv!");
+        goto done;
+      }
+      i_measurement_valid_chunk_start = i_measurement;
+      i_measurement_valid_chunk_last  = i_measurement+chunk_size-1;
+    }
+
+    double jt_invJtJ_j = 0.0;
+    for(int i=0; i<Nstate; i++)
+      jt_invJtJ_j +=
+        invJtJ_Jt     [Nstate*(i_measurement-i_measurement_valid_chunk_start) + i] *
+        point->J_dense[Nstate* i_measurement                                  + i];
+
+    accum_outlierness_factor(factors, point->x, jt_invJtJ_j, i_measurement, Nmeasurements);
+  }
+
+  result = true;
+ done:
+  free(invJtJ_Jt);
+  return result;
+}
+
+
+static bool getOutliernessFactors_sparse( // output
+                                         double* factors, // Nmeasurements factors
+
+                                         // inputs
+                                         const dogleg_operatingPoint_t* point,
+                                         dogleg_solverContext_t* ctx )
+{
+  // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
+  // chunks of 4 too. I pass it rows of J, 4 at a time
+  const int chunk_size = 4;
+
+  int  Nstate        = ctx->Nstate;
+  int  Nmeasurements = ctx->Nmeasurements;
+  bool result        = false;
+
+  cholmod_dense* invJtJ_Jt = NULL;
+  cholmod_dense* Jt_chunk =
+    cholmod_allocate_dense( Nstate,
+                            chunk_size,
+                            Nstate,
+                            CHOLMOD_REAL,
+                            &ctx->common );
+  if(!Jt_chunk)
+  {
+    SAY("Couldn't allocate Jt_chunk!");
+    goto done;
+  }
+
+  // I now have inv(JtJ)*j for ALL my j. I compute the outlier factor for each
+  // measurement
+  int i_measurement_valid_chunk_start = -1;
+  int i_measurement_valid_chunk_last  = -1;
+  for( int i_measurement=0; i_measurement<Nmeasurements; i_measurement++)
+  {
+    if( i_measurement > i_measurement_valid_chunk_last )
+    {
+      if(invJtJ_Jt) cholmod_free_dense(&invJtJ_Jt, &ctx->common);
+      invJtJ_Jt = pseudoinverse_J_sparse(point, ctx,
+                                         i_measurement, chunk_size,
+                                         Jt_chunk);
+      if(invJtJ_Jt == NULL)
+      {
+        SAY("Couldn't compute pinv!");
+        goto done;
+      }
+
+      i_measurement_valid_chunk_start = i_measurement;
+      i_measurement_valid_chunk_last  = i_measurement+chunk_size-1;
+    }
+
+    // sparse version of this:
+    // double jt_invJtJ_j =
+    //   dot_vec(Nstate,
+    //           &invJtJ_Jt     [Nstate*(i_measurement-i_measurement_valid_chunk_start) + 0],
+    //           &point->J_dense[Nstate* i_measurement                                  + 0]);
+    double jt_invJtJ_j = 0.0;
+    for(unsigned int j = P(point->Jt, i_measurement);
+        j     < P(point->Jt, i_measurement+1);
+        j++)
+    {
+      int irow = I(point->Jt, j);
+      jt_invJtJ_j +=
+        ((double*)invJtJ_Jt->x)[Nstate*(i_measurement-i_measurement_valid_chunk_start) + irow] *
+        X(point->Jt, j);
+    }
+
+    accum_outlierness_factor(factors, point->x, jt_invJtJ_j, i_measurement, Nmeasurements);
+  }
+
+  result = true;
+ done:
+  if(Jt_chunk)  cholmod_free_dense(&Jt_chunk,  &ctx->common);
+  if(invJtJ_Jt) cholmod_free_dense(&invJtJ_Jt, &ctx->common);
+  return result;
+}
+
+// Computes outlierness factors. This function is experimental, and subject to
+// change. See comment inside function for detail.
+bool dogleg_getOutliernessFactors( // output
+                                  double* factors, // Nmeasurements factors
+
+                                  // inputs
+                                  dogleg_operatingPoint_t* point,
+                                  dogleg_solverContext_t* ctx )
+{
+  // We just computed an optimum least-squares fit, and we try to determine if
+  // some of the data points look like outliers.
+  // The least squares problem I just solved has cost function
+  //
+  //   E = sum( norm2(x) )
+  //
+  // where x is a length-N vector of measurements. We solved it by optimizing
+  // the vector of parameters p. We define an outlier as a measurement that
+  // would greatly improve the MEAN cost function E/N if this measurement was
+  // removed, and the problem was re-optimized.
+  //
+  // Each measurement contributes to the cost function in two ways:
+  // - directly, with its x value
+  //
+  // - indirectly, since minimizing E for THIS measurement pulls p in a
+  //   particular direction, and without this measurement, p is more free to
+  //   move in a way that reduces errors for the other measurements
+  //
+  // We look at the total cost of a particular measurement, by looking at the
+  // sum of these contributions. Note that this definition of an outlier has a
+  // big caveat: measurements that define the problem will look like outliers
+  // because taking them out will let the solver overfit to an
+  // artificially-low value of the cost function. The way to address this is
+  // to add another condition: a set of measurements are outliers if they have
+  // a large outlierness factor AND if removing it doesn't cause a large
+  // decrease in the confidence of the solution. The former is a very simple
+  // computation, performed by this function. The latter is more
+  // computationally costly. We only need to run that computation for
+  // large-outlierness-factor measurements, so it should be relatively quick.
+  //
+  // Solving the full problem (BOTH inliers, outliers) I minimize E_io =
+  // norm2( x_io(p_io) ). If I knew which measurements are outliers, I can
+  // remove them and minimize E_i = norm2( x_i(p_i) ). In reality I don't know
+  // which measurements are outliers, so I have ..._io, but not ..._i.
+  //
+  // Let p_i and p_io be the state vectors are their respective optima. And
+  // let's assume that the system is locally linear with J = dx/dp. I can
+  // split this into Ji = dxi/dp, Jo = dxo/dp. Then p_i = p_io + dp ->
+  // x_i(p_i) ~ x_i(p_io) + Ji*dp -> Ei = norm2( x_i(p_io) + Ji*dp )
+  // dp is the shift in p: dp = pi-pio
+  //
+  // p_io optimizes E_io ->
+  // dEio/dp = 0 -> Jt x_io(p_io) = Jit xi + Jot xo = 0
+  //     ---> Jit xi = -Jot xo
+  //
+  // We also know that p_i optimizes E_i ->
+  // dEi/dpi = 0 = -> Jit ( x_i(p_io) + Ji dp ) = 0
+  //    ---> Jit xi = -Jit Ji dp
+  //    ---> dp = - inv(Jit Ji) Jit xi
+  //
+  // The outlierness factor is E_io/(Ni+No) - E_i/Ni. If Ni >> No ->
+  // outlierness factor f = (E_io - E_i) / N. I would expect the cost function
+  // to improve when data is removed, so I would expect f > 0, with LARGE f
+  // indicating an outlier.
+  //
+  // f = 1/N (norm2( x_io(p_io) ) - norm2( x_i(p_io) + Ji*dp ) )
+  //   = 1/N (norm2( x_i(p_io) ) + norm2( x_o(p_io) ) - norm2( x_i(p_io) + Ji*dp ) )
+  //   = 1/N (norm2( x_o(p_io) ) - 2*inner( x_i(p_io), Ji*dp ) - norm2( Ji*dp ) )
+  //   = 1/N (xot xo - 2 xit Ji dp - norm2(Ji dp)) =
+  //   = 1/N (xot xo - 2 xit Ji dp - dpt Jit Ji dp =
+  //   = 1/N (xot xo - 2 xit Ji dp + xit Ji dp) =
+  //   = 1/N (xot xo - xit Ji dp )
+  //   = 1/N (xot xo + xit Ji inv(Jit Ji) Jit xi )
+  //   = 1/N (xot xo + xot Jo inv(Jit Ji) Jot xo )
+  //   = 1/N (xot (I + Jo inv(Jit Ji) Jot) xo )
+  //
+  // I already optimized the inlier-and-outlier problem, so I have
+  //
+  //   JtJ = sum(outer( ji, ji ) + outer( jo, jo ))
+  //       = Jit Ji + Jot Jo
+  //
+  // and
+  //
+  //   inv(Jit Ji) = inv(JtJ - Jot Jo)
+  //
+  // Woodbury identity:
+  //
+  //   inv(Jit Ji) = inv(JtJ - Jot Jo) =
+  //               = inv(JtJ) - inv(JtJ) Jot inv(-I + Jo inv(JtJ) Jot) Jo inv(JtJ)
+  //
+  // Let M = inv(JtJ) ->
+  //   inv(Jit Ji) = M - M Jot inv(-I + Jo M Jot) Jo M
+  //
+  // So f = 1/N (xot (I + Jo M Jot - Jo M Jot inv(-I + Jo M Jot) Jo M Jot) xo )
+  //
+  // Let a = Jo M Jot ->
+  //    f = 1/N (xot (I + a - a inv(-I + a) a) xo )
+  //
+  // If I'm looking at a single outlier measurement then a is a scalar and
+  //
+  //    f = 1/N xo^2 (a+1 - a^2/(a-1))
+  //      = 1/N xo^2 ( - 1/(a-1)) =
+  //      = xo^2 / ( N* (1-a)) =
+  //      = xo^2 / ( N* (1 - jt inv(JtJ) j))
+  //
+  // I just solved the nonlinear optimization problem, so I already have
+  // inv(JtJ). And for any one measurement, the outlier factor is
+  //
+  //    x^2 / (1 - jt inv(JtJ) j) / Nmeasurement
+  //
+  // where x is the scalar measurement, j is its vector gradient and JtJ = Jt
+  // * J and J is a matrix of ALL the gradients of all the measurements
+  //
+  // This is the the "self" error difference + the "others" error difference.
+  // If I split this up I get
+  //
+  //   f_others = f_both - x^2/N =
+  //              x^2/Nmeasurement ( 1 / (1 - jt inv(JtJ) j) - 1 ) =
+  //              x^2/Nmeasurement ( (1 - (1 - jt inv(JtJ) j)) / (1 - jt inv(JtJ) j) ) =
+  //              x^2/Nmeasurement ( jt inv(JtJ) j / (1 - jt inv(JtJ) j) ) =
+
+  dogleg_computeJtJfactorization( point, ctx );
+  bool result;
+  if(ctx->is_sparse)
+    result = getOutliernessFactors_sparse(factors, point, ctx);
+  else
+    result = getOutliernessFactors_dense(factors, point, ctx);
+
+#if 0
+  if( result )
+  {
+    int  Nstate        = ctx->Nstate;
+    int  Nmeasurements = ctx->Nmeasurements;
+
+
+
+    static FILE* fp = NULL;
+    if(fp == NULL)
+      fp = fopen("/tmp/check-outlierness.py", "w");
+    static int count = -1;
+    count++;
+    if(count > 5)
+      goto done;
+
+    fprintf(fp, "# WARNING: all J here are unscaled with SCALE_....\n");
+
+    if(count == 0)
+    {
+      fprintf(fp,
+              "import numpy as np\n"
+              "import numpysane as nps\n"
+              "np.set_printoptions(linewidth=100000)\n"
+              "\n");
+    }
+
+    fprintf(fp, "x%d = np.array((", count);
+    for(int j=0;j<Nmeasurements;j++)
+      fprintf(fp, "%.20g,", point->x[j]);
+    fprintf(fp,"))\n");
+
+    if( ctx->is_sparse )
+    {
+      fprintf(fp, "J%d = np.zeros((%d,%d))\n", count, Nmeasurements, Nstate);
+      for(int imeas=0;imeas<Nmeasurements;imeas++)
+      {
+        for(int j = P(point->Jt, i_measurement);
+            j     < P(point->Jt, i_measurement+1);
+            j++)
+        {
+          int irow = I(point->Jt, j);
+          fprintf(fp, "J%d[%d,%d] = %g\n", count,
+                  imeas, irow, X(point->Jt, j));
+        }
+      }
+    }
+    else
+    {
+      fprintf(fp, "J%d = np.array((\n", count);
+      for(int j=0;j<Nmeasurements;j++)
+      {
+        fprintf(fp, "(");
+        for(int i=0;i<Nstate;i++)
+          fprintf(fp, "%.20g,", J[j*Nstate+i]);
+        fprintf(fp, "),\n");
+      }
+      fprintf(fp,"))\n");
+    }
+
+    fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);
+
+    fprintf(fp, "factors_got = np.array((");
+    for(int j=0;j<Nmeasurements;j++)
+      fprintf(fp, "%.20g,", factors[j]);
+    fprintf(fp,"))\n");
+
+    fprintf(fp,
+            "pinvj = np.linalg.pinv(J%1$d)\n"
+            "factors_ref = x%1$d*x%1$d/(1.0 - nps.inner(J%1$d, nps.transpose(pinvj)))/Nmeasurements\n",
+            count);
+
+    fprintf(fp, "print 'factors_got: {}'.format(factors_got)\n");
+    fprintf(fp, "print 'factors_ref: {}'.format(factors_ref)\n");
+    fprintf(fp, "print 'normdiff: {}'.format(np.linalg.norm(factors_ref[:factors_got.shape[0]]-factors_got))\n");
+    fflush(fp);
+  }
+#endif
+
+  return result;
 }

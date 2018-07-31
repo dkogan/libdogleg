@@ -6,6 +6,7 @@
 #pragma once
 
 #include <suitesparse/cholmod.h>
+#include <stdbool.h>
 
 typedef void (dogleg_callback_t)(const double*   p,
                                  double*         x,
@@ -173,3 +174,12 @@ void dogleg_setInitialTrustregion(double t);
 //
 // to leave a particular threshold alone, use a value <= 0 here
 void dogleg_setThresholds(double Jt_x, double update, double trustregion);
+
+// Computes outlierness factors. This function is experimental, and subject to
+// change.
+bool dogleg_getOutliernessFactors( // output
+                                  double* factors, // Nmeasurements factors
+
+                                  // inputs
+                                  dogleg_operatingPoint_t* point,
+                                  dogleg_solverContext_t* ctx );
