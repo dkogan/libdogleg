@@ -1728,9 +1728,8 @@ static void markPotentialOutliers(// output, input
     {
         markedAnyPotential = false;
 
-        double N_recip = 1.0/(double)N_in_statistics;
-        double mean = outlierness_sum * N_recip;
-        double var  = outlierness_sum_sq_diff_mean*N_recip;
+        double mean = outlierness_sum              /(double)N_in_statistics;
+        double var  = outlierness_sum_sq_diff_mean /(double)N_in_statistics;
         SAY_IF_VERBOSE("have outlierness mean,var: %g,%g", mean, var);
 
         for(int i=0; i<Ngroups; i++)
@@ -1769,10 +1768,11 @@ static void markPotentialOutliers(// output, input
             N_in_statistics--;
             markedAnyPotential                = true;
             markedOutliers[i].markedPotential = true;
+
+            mean = outlierness_sum              / (double)N_in_statistics;
+            var  = outlierness_sum_sq_diff_mean / (double)N_in_statistics;
             SAY_IF_VERBOSE("New potential outlier group: %d. new mean,var: %g,%g",
-                           i,
-                           outlierness_sum / (double)N_in_statistics,
-                           outlierness_sum_sq_diff_mean/ (double)N_in_statistics);
+                           i, mean, var);
         }
     } while(markedAnyPotential);
 }
