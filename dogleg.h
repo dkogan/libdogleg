@@ -178,13 +178,15 @@ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 // Computes outlierness factors. This function is experimental, and subject to
 // change.
 bool dogleg_getOutliernessFactors( // output
-                                  double* factors, // Nmeasurements factors
+                                  double* factors, // Ngroups factors
 
                                   // inputs
+                                  // if outliers are grouped into sets, the group size is
+                                  // stated here
+                                  int measurementGroupSize,
+                                  int Ngroups,
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx );
-
-
 
 
 
@@ -194,7 +196,6 @@ struct dogleg_outliers_t
 {
     char marked            : 1;
     char markedPotential   : 1;
-    char ignoreForOutliers : 1;
 };
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
@@ -202,10 +203,22 @@ bool dogleg_markOutliers(// output, input
                          int* Noutliers,
 
                          // input
-                         double (getConfidence)(int i_exclude),
+                         double (getConfidence)(int i_group_exclude),
+
+                         // if outliers are grouped into sets, the group size is
+                         // stated here
+                         int measurementGroupSize,
+                         int Ngroups,
+
                          dogleg_operatingPoint_t* point,
                          dogleg_solverContext_t* ctx);
 
-void dogleg_reportOutliers( double (getConfidence)(int i_exclude),
+void dogleg_reportOutliers( double (getConfidence)(int i_group_exclude),
+
+                            // if outliers are grouped into sets, the group size
+                            // is stated here
+                            int measurementGroupSize,
+                            int Ngroups,
+
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx);
