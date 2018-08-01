@@ -183,3 +183,29 @@ bool dogleg_getOutliernessFactors( // output
                                   // inputs
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx );
+
+
+
+
+
+
+// This stuff is experimental, and subject to change.
+struct dogleg_outliers_t
+{
+    char marked            : 1;
+    char markedPotential   : 1;
+    char ignoreForOutliers : 1;
+};
+bool dogleg_markOutliers(// output, input
+                         struct dogleg_outliers_t* markedOutliers,
+                         // output only
+                         int* Noutliers,
+
+                         // input
+                         double (getConfidence)(int i_exclude),
+                         dogleg_operatingPoint_t* point,
+                         dogleg_solverContext_t* ctx);
+
+void dogleg_reportOutliers( double (getConfidence)(int i_exclude),
+                            dogleg_operatingPoint_t* point,
+                            dogleg_solverContext_t* ctx);

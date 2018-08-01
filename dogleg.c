@@ -22,6 +22,7 @@
 
 #define SAY_NONEWLINE(fmt, ...) fprintf(stderr, "libdogleg at %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 #define SAY(fmt, ...)           do {  SAY_NONEWLINE(fmt, ## __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
+#define SAY_IF_VERBOSE(fmt,...) do { if( DOGLEG_DEBUG ) SAY(fmt, ##__VA_ARGS__); } while(0)
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x "is not true"); exit(1); } } while(0)
@@ -1535,4 +1536,260 @@ bool dogleg_getOutliernessFactors( // output
 #endif
 
   return result;
+}
+
+
+
+#define OUTLIER_N_STDEVS_THRESHOLD        4
+#define OUTLIER_CONFIDENCE_DROP_THRESHOLD 0.05
+static void markPotentialOutliers(// output, input
+                                  struct dogleg_outliers_t* markedOutliers,
+                                  // output only
+                                  int* Noutliers,
+
+                                  // input
+                                  const double* outlierness_factors,
+                                  int Nmeasurements)
+{
+    // I have the outlier factors. How outliery is too outliery? Currently I
+    // look at the distribution of the outlier factors across my dataset,
+    // and focus on those measurements whose outlier factors are outliers.
+    //
+    // First, compute the mean, variance of the factors
+    double outlierness_sum_sq_diff_mean = 0.0;
+    double outlierness_sum              = 0.0;
+
+    int N_in_statistics = 0;
+    *Noutliers = 0;
+    {
+        // I do this in 2 passes. I like my floating-point precision
+        for(int i=0; i<Nmeasurements; i++)
+        {
+            if(markedOutliers[i].ignoreForOutliers)
+                continue;
+            if(markedOutliers[i].marked)
+            {
+                // this feature has already been designated an outlier
+                (*Noutliers)++;
+                continue;
+            }
+            if( outlierness_factors[i] == DBL_MAX )
+            {
+                // it's an outlier, but I don't want to include it in my
+                // statistics, since it'll break them
+                markedOutliers[i].markedPotential = true;
+                continue;
+            }
+            markedOutliers[i].markedPotential = false;
+            outlierness_sum += outlierness_factors[i];
+            N_in_statistics++;
+        }
+        double mean = outlierness_sum / (double)N_in_statistics;
+
+        for(int i=0; i<Nmeasurements; i++)
+        {
+            if(markedOutliers[i].ignoreForOutliers)
+                continue;
+            if(markedOutliers[i].marked)
+                // this feature has already been designated an outlier
+                continue;
+            if( outlierness_factors[i] == DBL_MAX )
+                // it's an outlier, but I don't want to include it in my
+                // statistics, since it'll break them
+                continue;
+
+            double d = outlierness_factors[i] - mean;
+            outlierness_sum_sq_diff_mean += d*d;
+        }
+    }
+
+    // Everything with an outlier factor at least X standard deviations
+    // above the mean is considered a candidate outlier. Throwing each of
+    // these out I recompute the mean and standard deviation to find more
+    // points X standard deviations above the mean. I keep marking potential
+    // outliers in this way, updating the variance, stdev with each pass. I
+    // keep going until no more potential outliers are marked. I update the
+    // variance and stdev with each pass because each outlier can have a
+    // strong effect on these statistics
+    bool markedAnyPotential;
+    do
+    {
+        markedAnyPotential = false;
+
+        double N_recip = 1.0/(double)N_in_statistics;
+        double mean = outlierness_sum * N_recip;
+        double var  = outlierness_sum_sq_diff_mean*N_recip;
+        SAY_IF_VERBOSE("have outlierness mean,var: %g,%g", mean, var);
+
+        for(int i=0; i<Nmeasurements; i++)
+        {
+            if( markedOutliers[i].ignoreForOutliers ||
+                markedOutliers[i].marked ||
+                markedOutliers[i].markedPotential)
+                continue;
+
+            double d = outlierness_factors[i] - mean;
+            if( d < 0.0 || d*d < (double)(OUTLIER_N_STDEVS_THRESHOLD*OUTLIER_N_STDEVS_THRESHOLD) * var )
+                continue;
+
+            // Outlierness factor is above X standard deviations above the mean.
+            // Potential outlier
+            outlierness_sum -= outlierness_factors[i];
+
+            // what happens to a variance when we remove a measurement xo?
+            //
+            // VN  = sum( (xi-m)^2 ) =
+            //     = sum( xi^2 - 2xi m + m^2 )
+            //     = sum( xi^2 )- N m^2
+            //
+            // VN'= sum( (xi-m')^2 )
+            //    = sum( xi^2 - 2xi m' + m'^2 )
+            //    = sum( xi^2 ) - xo^2 - (N-1) (m')^2
+            //    = VN + N m^2 - xo^2 - (N-1) (m')^2
+            //    = VN - xo^2 - (S-xo)^2/(N-1) + S^2/N
+            //    = VN - xo^2  + (S^2 N - S^2 - S^2 N + 2 S xo N - xo^2 N )/(N-1)/N
+            //    = VN - xo^2  - (S^2 - 2 S xo N + xo^2 N )/(N-1)/N
+            //    = VN - ( xo^2 N^2 - xo^2* N + S^2 - 2 S xo N + xo^2 N )/(N-1)/N
+            //    = VN - ( xo^2 N^2 + S^2 - 2 S xo N )/(N-1)/N
+            //    = VN - ( N xo - S )^2/(N-1)/N
+            d = outlierness_sum - outlierness_factors[i]*(double)(N_in_statistics-1);
+            outlierness_sum_sq_diff_mean -= d*d/(double)((N_in_statistics-1)*N_in_statistics);
+
+            N_in_statistics--;
+            markedAnyPotential                = true;
+            markedOutliers[i].markedPotential = true;
+            SAY_IF_VERBOSE("New potential outlier feature: %d. new mean,var: %g,%g",
+                           i,
+                           outlierness_sum / (double)N_in_statistics,
+                           outlierness_sum_sq_diff_mean/ (double)N_in_statistics);
+        }
+    } while(markedAnyPotential);
+}
+
+bool dogleg_markOutliers(// output, input
+                         struct dogleg_outliers_t* markedOutliers,
+                         // output only
+                         int* Noutliers,
+
+                         // input
+                         double (getConfidence)(int i_exclude),
+                         dogleg_operatingPoint_t* point,
+                         dogleg_solverContext_t* ctx)
+{
+    // What is an outlier? Suppose I just found an optimum. I define an
+    // outlier as an observation that does two things to the problem if I
+    // remove that observation:
+    //
+    // 1. The cost function would improve significantly. Things would
+    //    clearly improve because the cost function contribution of the
+    //    removed point itself would get removed, but ALSO because the
+    //    parameters could fit to the remaining data better without that
+    //    extra observation.
+    //
+    // 2. The confidence of the solution does not significantly decrease.
+    //    One could imagine a set of data that define the problem poorly,
+    //    and produce a low cost function value for some (overfit) set of
+    //    parameters. And one can imagine an extra point being added that
+    //    defines the problem and increases the confidence of the solution.
+    //    This extra point would suppress the overfitting, so this extra
+    //    point would increase the cost function value. Condition 1 above
+    //    would make this extra point look like an outlier, and this
+    //    condition is meant to detect this case and to classify this point
+    //    as NOT an outlier
+    bool markedAny = false;
+
+    int Nmeasurements = ctx->Nmeasurements;
+    double* outlierness_factors = malloc(Nmeasurements * sizeof(double));
+    if(outlierness_factors == NULL)
+    {
+        SAY("Error allocating outlierness_factors");
+        goto done;
+    }
+
+    if(!dogleg_getOutliernessFactors(outlierness_factors, point, ctx))
+        goto done;
+
+    markPotentialOutliers( markedOutliers, Noutliers,
+                           outlierness_factors, Nmeasurements);
+
+
+    // OK then. I have my list of POTENTIAL outliers. These all have
+    // suspicious outlierness factors. I check to see how much confidence I
+    // would lose if I were to throw out any of these measurements, and
+    // accept the outlier ONLY if the confidence loss is acceptable
+    double confidence0 = getConfidence(-1);
+    if( confidence0 < 0.0 )
+        return false;
+
+    SAY_IF_VERBOSE("Initial confidence: %g", confidence0);
+
+    for(int i=0; i<Nmeasurements; i++)
+    {
+        if(markedOutliers[i].marked || !markedOutliers[i].markedPotential)
+            continue;
+
+        // Looking at potential new outlier
+        double confidence_excluded = getConfidence(i);
+        if( confidence_excluded < 0.0 )
+            return false;
+
+        double confidence_drop_relative = 1.0 - confidence_excluded / confidence0;
+        if( confidence_drop_relative < OUTLIER_CONFIDENCE_DROP_THRESHOLD )
+        {
+            // I would lose less than X of my confidence. OK. This is an
+            // outlier. Throw it away.
+            markedOutliers[i].marked = true;
+            markedAny                = true;
+            SAY_IF_VERBOSE("Excluding point %d produces a confidence: %g. relative loss: %g... YES an outlier; confidence drops little",
+                           i, confidence_excluded, confidence_drop_relative);
+            (*Noutliers)++;
+        }
+        else
+        {
+            SAY_IF_VERBOSE("Excluding point %d produces a confidence: %g. relative loss: %g... NOT an outlier: confidence drops too much",
+                           i, confidence_excluded, confidence_drop_relative);
+        }
+    }
+
+ done:
+    free(outlierness_factors);
+    return markedAny;
+}
+
+// This function is just for debug reporting. It is probably too slow to
+// call in general: it computes the confidence for each feature to see the
+// confidence change if the feature were to be removed. Normally we do this
+// ONLY for potential outliers
+void dogleg_reportOutliers( double (getConfidence)(int i_exclude),
+                            dogleg_operatingPoint_t* point,
+                            dogleg_solverContext_t* ctx)
+{
+    int Nmeasurements = ctx->Nmeasurements;
+    double* outlierness_factors = malloc(Nmeasurements * sizeof(double));
+    if(outlierness_factors == NULL)
+    {
+        SAY("Error allocating outlierness_factors");
+        goto done;
+    }
+
+    dogleg_getOutliernessFactors(outlierness_factors, point, ctx);
+
+    SAY("## Outlier statistics");
+    SAY("# i_feature outlier_factor confidence_drop_relative_if_removed");
+
+    double confidence_full = getConfidence(-1);
+
+    for(int i=0; i<Nmeasurements; i++)
+    {
+      double confidence = getConfidence(i);
+      double rot_confidence_drop_relative = 1.0 - confidence / confidence_full;
+
+      SAY("%3d %9.3g %9.3g",
+          i,
+          outlierness_factors[i],
+          rot_confidence_drop_relative);
+    }
+
+ done:
+    free(outlierness_factors);
 }
