@@ -1908,18 +1908,27 @@ void dogleg_reportOutliers( double (getConfidence)(int i_group_exclude),
     dogleg_getOutliernessFactors(factors, measurementGroupSize, Ngroups, point, ctx);
 
     SAY("## Outlier statistics");
-    SAY("# i_feature outlier_factor confidence_drop_relative_if_removed");
+    SAY("# i_feature outlier_factor outlier_factor_self outlier_factor_others confidence_drop_relative_if_removed");
 
     double confidence_full = getConfidence(-1);
+    int  Nmeasurements = ctx->Nmeasurements;
 
     for(int i=0; i<Ngroups; i++)
     {
       double confidence = getConfidence(i);
       double rot_confidence_drop_relative = 1.0 - confidence / confidence_full;
 
-      SAY("%3d %9.3g %9.3g",
+      double self = 0.0;
+      for(int j=0; j<measurementGroupSize; j++)
+      {
+        double x = point->x[i*measurementGroupSize + j];
+        self += x*x;
+      }
+      self /= (double)Nmeasurements;
+
+      SAY("%5d %9.3g %9.3g %9.3g %9.3g",
           i,
-          factors[i],
+          factors[i], self, factors[i] - self,
           rot_confidence_drop_relative);
     }
 
