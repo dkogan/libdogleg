@@ -1654,9 +1654,9 @@ bool dogleg_getOutliernessFactors( // output
     }
     fflush(fp);
   }
+ done:
 #endif
 
- done:
   return result;
 }
 
