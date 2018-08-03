@@ -1256,7 +1256,7 @@ static bool getOutliernessFactors_dense( // output
   // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
   // chunks of 4 too. I pass it rows of J, 4 at a time. Note that if I have
   // measurement groups, I don't want these to cross chunk boundaries, so I set
-  // up chunk_size=N*4
+  // up chunk_size=lcm(N,4)
   int chunk_size = 4;
   if(measurementGroupSize <= 1)
     measurementGroupSize = 1;
@@ -1342,7 +1342,7 @@ static bool getOutliernessFactors_sparse( // output
   // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
   // chunks of 4 too. I pass it rows of J, 4 at a time. Note that if I have
   // measurement groups, I don't want these to cross chunk boundaries, so I set
-  // up chunk_size=N*4
+  // up chunk_size=lcm(N,4)
   int chunk_size = 4;
   if(measurementGroupSize <= 1)
     measurementGroupSize = 1;
