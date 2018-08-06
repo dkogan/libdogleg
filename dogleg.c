@@ -969,7 +969,7 @@ static int cholmod_error_callback(const char* s, ...)
   va_start(ap, s);
   int ret = vfprintf(stderr, s, ap);
   va_end(ap);
-
+  fprintf(stderr, "\n");
   return ret;
 }
 
