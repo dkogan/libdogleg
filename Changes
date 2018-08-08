@@ -1,3 +1,10 @@
+ligdogleg (0.15)
+
+  * added experimental outlier-rejection logic.
+    This is not yet documented, and the API not yet fixed. Use at your own risk
+
+ -- Dima Kogan <dima@secretsauce.net>  Wed, 08 Aug 2018 16:04:38 -0700
+
 libdogleg (0.14)
 
   * standardized CHOLMOD error messages
