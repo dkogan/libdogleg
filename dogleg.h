@@ -178,13 +178,13 @@ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 // Computes outlierness factors. This function is experimental, and subject to
 // change.
 bool dogleg_getOutliernessFactors( // output
-                                  double* factors, // Ngroups factors
+                                  double* factors, // Nfeatures factors
 
                                   // inputs
-                                  // if outliers are grouped into sets, the group size is
+                                  // if outliers are grouped into features, the feature size is
                                   // stated here
-                                  int measurementGroupSize,
-                                  int Ngroups,
+                                  int featureSize,
+                                  int Nfeatures,
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx );
 
@@ -203,22 +203,22 @@ bool dogleg_markOutliers(// output, input
                          int* Noutliers,
 
                          // input
-                         double (getConfidence)(int i_group_exclude),
+                         double (getConfidence)(int i_feature_exclude),
 
-                         // if outliers are grouped into sets, the group size is
+                         // if outliers are grouped into features, the feature size is
                          // stated here
-                         int measurementGroupSize,
-                         int Ngroups,
+                         int featureSize,
+                         int Nfeatures,
 
                          dogleg_operatingPoint_t* point,
                          dogleg_solverContext_t* ctx);
 
-void dogleg_reportOutliers( double (getConfidence)(int i_group_exclude),
+void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
 
-                            // if outliers are grouped into sets, the group size
+                            // if outliers are grouped into features, the feature size
                             // is stated here
-                            int measurementGroupSize,
-                            int Ngroups,
+                            int featureSize,
+                            int Nfeatures,
 
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx);

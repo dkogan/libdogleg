@@ -1189,9 +1189,9 @@ static void accum_outlierness_factor(// output
                                      // A is symmetric. I store the upper triangle
                                      const double* A,
 
-                                     // if outliers are grouped into sets, the
-                                     // group size is stated here
-                                     int measurementGroupSize,
+                                     // if outliers are grouped into features, the
+                                     // feature size is set here
+                                     int featureSize,
                                      int Nmeasurements)
 {
   // from the derivation in a big comment in dogleg_getOutliernessFactors() I
@@ -1201,10 +1201,10 @@ static void accum_outlierness_factor(// output
   //
   // where A = Jo inv(JtJ) Jot
 
-  // I only implemented measurementGroupSize so far
-  if(measurementGroupSize <= 1)
+  // I only implemented featureSize so far
+  if(featureSize <= 1)
   {
-    measurementGroupSize = 1;
+    featureSize = 1;
 
     double denom = 1.0 - *A;
     if( fabs(denom) < 1e-8 )
@@ -1212,7 +1212,7 @@ static void accum_outlierness_factor(// output
     else
       *factor = x[0]*x[0] / (denom * (double)Nmeasurements);
   }
-  else if(measurementGroupSize == 2)
+  else if(featureSize == 2)
   {
     //   f = 1/N (xot (I + A - A inv(-I + A) A) xo ) =
     //     = 1/N (norm2(xo) + xot A xo - (A xo)t inv(-I + A) (A xo)) =
@@ -1237,34 +1237,34 @@ static void accum_outlierness_factor(// output
   }
   else
   {
-    SAY("measurementGroupSize > 2 not implemented yet. Got measurementGroupSize=%d", measurementGroupSize);
+    SAY("featureSize > 2 not implemented yet. Got featureSize=%d", featureSize);
     ASSERT(0);
   }
 }
 
 static bool getOutliernessFactors_dense( // output
-                                        double* factors, // Ngroups factors
+                                        double* factors, // Nfeatures factors
 
                                         // inputs
-                                        // if outliers are grouped into sets,
-                                        // the group size is stated here
-                                        int measurementGroupSize,
-                                        int Ngroups,
+                                        // if outliers are grouped into features,
+                                        // the feature size is set here
+                                        int featureSize,
+                                        int Nfeatures,
                                         const dogleg_operatingPoint_t* point,
                                         dogleg_solverContext_t* ctx )
 {
   // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
   // chunks of 4 too. I pass it rows of J, 4 at a time. Note that if I have
-  // measurement groups, I don't want these to cross chunk boundaries, so I set
+  // measurement features, I don't want these to cross chunk boundaries, so I set
   // up chunk_size=lcm(N,4)
   int chunk_size = 4;
-  if(measurementGroupSize <= 1)
-    measurementGroupSize = 1;
-  if(measurementGroupSize > 1)
+  if(featureSize <= 1)
+    featureSize = 1;
+  if(featureSize > 1)
   {
     // haven't implemented anything else yet. Don't have lcm() readily available
-    ASSERT(measurementGroupSize == 2);
-    // chunk_size = lcm(chunk_size,measurementGroupSize)
+    ASSERT(featureSize == 2);
+    // chunk_size = lcm(chunk_size,featureSize)
   }
 
   int  Nstate        = ctx->Nstate;
@@ -1281,7 +1281,7 @@ static bool getOutliernessFactors_dense( // output
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
   int i_measurement = 0;
-  for( int i_group=0; i_group<Ngroups; i_group++, i_measurement+=measurementGroupSize)
+  for( int i_feature=0; i_feature<Nfeatures; i_feature++, i_measurement+=featureSize)
   {
     if( i_measurement > i_measurement_valid_chunk_last )
     {
@@ -1304,10 +1304,10 @@ static bool getOutliernessFactors_dense( // output
     // where A = Jo inv(JtJ) Jot
     //
     // A is symmetric. I store the upper triangle
-    double A[measurementGroupSize*(measurementGroupSize+1)/2];
+    double A[featureSize*(featureSize+1)/2];
     int iA=0;
-    for(int i=0; i<measurementGroupSize; i++)
-      for(int j=i; j<measurementGroupSize; j++, iA++)
+    for(int i=0; i<featureSize; i++)
+      for(int j=i; j<featureSize; j++, iA++)
       {
         A[iA] = 0.0;
 
@@ -1316,9 +1316,9 @@ static bool getOutliernessFactors_dense( // output
             invJtJ_Jt     [Nstate*(i_measurement+i -i_measurement_valid_chunk_start) + k] *
             point->J_dense[Nstate* i_measurement+j                                   + k];
       }
-    accum_outlierness_factor(&factors[i_group],
+    accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, measurementGroupSize, Nmeasurements);
+                             A, featureSize, Nmeasurements);
   }
 
   result = true;
@@ -1329,28 +1329,28 @@ static bool getOutliernessFactors_dense( // output
 
 
 static bool getOutliernessFactors_sparse( // output
-                                         double* factors, // Ngroups factors
+                                         double* factors, // Nfeatures factors
 
                                          // inputs
-                                         // if outliers are grouped into sets,
-                                         // the group size is stated here
-                                         int measurementGroupSize,
-                                         int Ngroups,
+                                         // if outliers are grouped into features,
+                                         // the feature size is set here
+                                         int featureSize,
+                                         int Nfeatures,
                                          const dogleg_operatingPoint_t* point,
                                          dogleg_solverContext_t* ctx )
 {
   // cholmod_spsolve() and cholmod_solve()) work in chunks of 4, so I do this in
   // chunks of 4 too. I pass it rows of J, 4 at a time. Note that if I have
-  // measurement groups, I don't want these to cross chunk boundaries, so I set
+  // measurement features, I don't want these to cross chunk boundaries, so I set
   // up chunk_size=lcm(N,4)
   int chunk_size = 4;
-  if(measurementGroupSize <= 1)
-    measurementGroupSize = 1;
-  if(measurementGroupSize > 1)
+  if(featureSize <= 1)
+    featureSize = 1;
+  if(featureSize > 1)
   {
     // haven't implemented anything else yet. Don't have lcm() readily available
-    ASSERT(measurementGroupSize == 2);
-    // chunk_size = lcm(chunk_size,measurementGroupSize)
+    ASSERT(featureSize == 2);
+    // chunk_size = lcm(chunk_size,featureSize)
   }
 
   int  Nstate        = ctx->Nstate;
@@ -1373,7 +1373,7 @@ static bool getOutliernessFactors_sparse( // output
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
   int i_measurement = 0;
-  for( int i_group=0; i_group<Ngroups; i_group++, i_measurement+=measurementGroupSize)
+  for( int i_feature=0; i_feature<Nfeatures; i_feature++, i_measurement+=featureSize)
   {
     if( i_measurement > i_measurement_valid_chunk_last )
     {
@@ -1399,10 +1399,10 @@ static bool getOutliernessFactors_sparse( // output
     // where A = Jo inv(JtJ) Jot
     //
     // A is symmetric. I store the upper triangle
-    double A[measurementGroupSize*(measurementGroupSize+1)/2];
+    double A[featureSize*(featureSize+1)/2];
     int iA=0;
-    for(int i=0; i<measurementGroupSize; i++)
-      for(int j=i; j<measurementGroupSize; j++, iA++)
+    for(int i=0; i<featureSize; i++)
+      for(int j=i; j<featureSize; j++, iA++)
       {
         A[iA] = 0.0;
 
@@ -1416,9 +1416,9 @@ static bool getOutliernessFactors_sparse( // output
             X(point->Jt, l);
         }
       }
-    accum_outlierness_factor(&factors[i_group],
+    accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, measurementGroupSize, Nmeasurements);
+                             A, featureSize, Nmeasurements);
   }
 
   result = true;
@@ -1431,13 +1431,13 @@ static bool getOutliernessFactors_sparse( // output
 // Computes outlierness factors. This function is experimental, and subject to
 // change. See comment inside function for detail.
 bool dogleg_getOutliernessFactors( // output
-                                  double* factors, // Ngroups factors
+                                  double* factors, // Nfeatures factors
 
                                   // inputs
-                                  // if outliers are grouped into sets, the group size is
-                                  // stated here
-                                  int measurementGroupSize,
-                                  int Ngroups,
+                                  // if outliers are grouped into features, the
+                                  // feature size is set here
+                                  int featureSize,
+                                  int Nfeatures,
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx )
 {
@@ -1552,15 +1552,15 @@ bool dogleg_getOutliernessFactors( // output
   //              x^2/Nmeasurement ( (1 - (1 - jt inv(JtJ) j)) / (1 - jt inv(JtJ) j) ) =
   //              x^2/Nmeasurement ( jt inv(JtJ) j / (1 - jt inv(JtJ) j) ) =
 
-  if(measurementGroupSize <= 1)
-    measurementGroupSize = 1;
+  if(featureSize <= 1)
+    featureSize = 1;
 
   dogleg_computeJtJfactorization( point, ctx );
   bool result;
   if(ctx->is_sparse)
-    result = getOutliernessFactors_sparse(factors, measurementGroupSize, Ngroups, point, ctx);
+    result = getOutliernessFactors_sparse(factors, featureSize, Nfeatures, point, ctx);
   else
-    result = getOutliernessFactors_dense(factors, measurementGroupSize, Ngroups, point, ctx);
+    result = getOutliernessFactors_dense(factors, featureSize, Nfeatures, point, ctx);
 
 #if 0
   if( result )
@@ -1623,26 +1623,26 @@ bool dogleg_getOutliernessFactors( // output
     }
 
     fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);
-    fprintf(fp, "Ngroups = %d\n", Ngroups);
-    fprintf(fp, "measurementGroupSize = %d\n", measurementGroupSize);
+    fprintf(fp, "Nfeatures = %d\n", Nfeatures);
+    fprintf(fp, "featureSize = %d\n", featureSize);
 
     fprintf(fp, "factors_got = np.array((");
-    for(int j=0;j<Ngroups;j++)
+    for(int j=0;j<Nfeatures;j++)
       fprintf(fp, "%.20g,", factors[j]);
     fprintf(fp,"))\n");
 
     fprintf(fp,
             "pinvj = np.linalg.pinv(J%1$d)\n"
-            "imeas0 = [measurementGroupSize*i for i in xrange(Ngroups)]\n"
-            "jslices = [J%1$d[imeas0[i]:(imeas0[i]+measurementGroupSize), :] for i in xrange(Ngroups)]\n"
-            "xslices = [x%1$d[imeas0[i]:(imeas0[i]+measurementGroupSize)   ] for i in xrange(Ngroups)]\n"
-            "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+measurementGroupSize)]) for i in xrange(Ngroups)]\n"
-            "factors_ref = np.array([nps.inner(xslices[i], nps.matmult(np.eye(measurementGroupSize) + A[i] - nps.matmult(A[i], np.linalg.solve(A[i]-np.eye(measurementGroupSize),A[i])), nps.transpose(xslices[i])).ravel()) for i in xrange(Ngroups)]) / Nmeasurements\n",
+            "imeas0 = [featureSize*i for i in xrange(Nfeatures)]\n"
+            "jslices = [J%1$d[imeas0[i]:(imeas0[i]+featureSize), :] for i in xrange(Nfeatures)]\n"
+            "xslices = [x%1$d[imeas0[i]:(imeas0[i]+featureSize)   ] for i in xrange(Nfeatures)]\n"
+            "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+featureSize)]) for i in xrange(Nfeatures)]\n"
+            "factors_ref = np.array([nps.inner(xslices[i], nps.matmult(np.eye(featureSize) + A[i] - nps.matmult(A[i], np.linalg.solve(A[i]-np.eye(featureSize),A[i])), nps.transpose(xslices[i])).ravel()) for i in xrange(Nfeatures)]) / Nmeasurements\n",
             count);
 
     fprintf(fp, "print 'normdiff: {}'.format(np.linalg.norm(factors_ref-factors_got))\n");
 
-    if(measurementGroupSize <= 1)
+    if(featureSize <= 1)
     {
       fprintf(fp,
               "factors_ref1 = x%1$d * x%1$d / (1.0 - nps.inner(J%1$d, nps.transpose(pinvj))) / Nmeasurements\n",
@@ -1669,7 +1669,7 @@ static void markPotentialOutliers(// output, input
 
                                   // input
                                   const double* factors,
-                                  int Ngroups)
+                                  int Nfeatures)
 {
     // I have the outlier factors. How outliery is too outliery? Currently I
     // look at the distribution of the outlier factors across my dataset,
@@ -1682,7 +1682,7 @@ static void markPotentialOutliers(// output, input
     int N_in_statistics = 0;
     {
         // I do this in 2 passes. I like my floating-point precision
-        for(int i=0; i<Ngroups; i++)
+        for(int i=0; i<Nfeatures; i++)
         {
             if(markedOutliers[i].marked)
                 // this feature has already been designated an outlier
@@ -1700,7 +1700,7 @@ static void markPotentialOutliers(// output, input
         }
         double mean = outlierness_sum / (double)N_in_statistics;
 
-        for(int i=0; i<Ngroups; i++)
+        for(int i=0; i<Nfeatures; i++)
         {
             if(markedOutliers[i].marked)
                 // this feature has already been designated an outlier
@@ -1732,7 +1732,7 @@ static void markPotentialOutliers(// output, input
         double var  = outlierness_sum_sq_diff_mean /(double)N_in_statistics;
         SAY_IF_VERBOSE("have outlierness mean,var: %g,%g", mean, var);
 
-        for(int i=0; i<Ngroups; i++)
+        for(int i=0; i<Nfeatures; i++)
         {
             if( markedOutliers[i].marked ||
                 markedOutliers[i].markedPotential)
@@ -1771,7 +1771,7 @@ static void markPotentialOutliers(// output, input
 
             mean = outlierness_sum              / (double)N_in_statistics;
             var  = outlierness_sum_sq_diff_mean / (double)N_in_statistics;
-            SAY_IF_VERBOSE("New potential outlier group: %d. new mean,var: %g,%g",
+            SAY_IF_VERBOSE("New potential outlier feature: %d. new mean,var: %g,%g",
                            i, mean, var);
         }
     } while(markedAnyPotential);
@@ -1783,18 +1783,18 @@ bool dogleg_markOutliers(// output, input
                          int* Noutliers,
 
                          // input
-                         double (getConfidence)(int i_group_exclude),
+                         double (getConfidence)(int i_feature_exclude),
 
-                         // if outliers are grouped into sets, the group size is
-                         // stated here
-                         int measurementGroupSize,
-                         int Ngroups,
+                         // if outliers are grouped into features, the feature
+                         // size is set here
+                         int featureSize,
+                         int Nfeatures,
 
                          dogleg_operatingPoint_t* point,
                          dogleg_solverContext_t* ctx)
 {
-    if(measurementGroupSize <= 1)
-      measurementGroupSize = 1;
+    if(featureSize <= 1)
+      featureSize = 1;
 
     // What is an outlier? Suppose I just found an optimum. I define an
     // outlier as an observation that does two things to the problem if I
@@ -1818,18 +1818,18 @@ bool dogleg_markOutliers(// output, input
     //    as NOT an outlier
     bool markedAny = false;
 
-    double* factors = malloc(Ngroups * sizeof(double));
+    double* factors = malloc(Nfeatures * sizeof(double));
     if(factors == NULL)
     {
         SAY("Error allocating factors");
         goto done;
     }
 
-    if(!dogleg_getOutliernessFactors(factors, measurementGroupSize, Ngroups, point, ctx))
+    if(!dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx))
         goto done;
 
     markPotentialOutliers( markedOutliers,
-                           factors, Ngroups);
+                           factors, Nfeatures);
 
 
     // OK then. I have my list of POTENTIAL outliers. These all have
@@ -1843,7 +1843,7 @@ bool dogleg_markOutliers(// output, input
     SAY_IF_VERBOSE("Initial confidence: %g", confidence0);
 
     *Noutliers = 0;
-    for(int i=0; i<Ngroups; i++)
+    for(int i=0; i<Nfeatures; i++)
     {
         if(markedOutliers[i].marked)
         {
@@ -1865,13 +1865,13 @@ bool dogleg_markOutliers(// output, input
             // outlier. Throw it away.
             markedOutliers[i].marked = true;
             markedAny                = true;
-            SAY_IF_VERBOSE("Excluding group %d produces a confidence: %g. relative loss: %g... YES an outlier; confidence drops little",
+            SAY_IF_VERBOSE("Excluding feature %d produces a confidence: %g. relative loss: %g... YES an outlier; confidence drops little",
                            i, confidence_excluded, confidence_drop_relative);
             (*Noutliers)++;
         }
         else
         {
-            SAY_IF_VERBOSE("Excluding group %d produces a confidence: %g. relative loss: %g... NOT an outlier: confidence drops too much",
+            SAY_IF_VERBOSE("Excluding feature %d produces a confidence: %g. relative loss: %g... NOT an outlier: confidence drops too much",
                            i, confidence_excluded, confidence_drop_relative);
         }
     }
@@ -1885,27 +1885,27 @@ bool dogleg_markOutliers(// output, input
 // call in general: it computes the confidence for each feature to see the
 // confidence change if the feature were to be removed. Normally we do this
 // ONLY for potential outliers
-void dogleg_reportOutliers( double (getConfidence)(int i_group_exclude),
+void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
 
-                            // if outliers are grouped into sets, the group size
-                            // is stated here
-                            int measurementGroupSize,
-                            int Ngroups,
+                            // if outliers are grouped into features, the
+                            // feature size is set here
+                            int featureSize,
+                            int Nfeatures,
 
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx)
 {
-    if(measurementGroupSize <= 1)
-      measurementGroupSize = 1;
+    if(featureSize <= 1)
+      featureSize = 1;
 
-    double* factors = malloc(Ngroups * sizeof(double));
+    double* factors = malloc(Nfeatures * sizeof(double));
     if(factors == NULL)
     {
         SAY("Error allocating factors");
         goto done;
     }
 
-    dogleg_getOutliernessFactors(factors, measurementGroupSize, Ngroups, point, ctx);
+    dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx);
 
     SAY("## Outlier statistics");
     SAY("# i_feature outlier_factor outlier_factor_self outlier_factor_others confidence_drop_relative_if_removed");
@@ -1913,15 +1913,15 @@ void dogleg_reportOutliers( double (getConfidence)(int i_group_exclude),
     double confidence_full = getConfidence(-1);
     int  Nmeasurements = ctx->Nmeasurements;
 
-    for(int i=0; i<Ngroups; i++)
+    for(int i=0; i<Nfeatures; i++)
     {
       double confidence = getConfidence(i);
       double rot_confidence_drop_relative = 1.0 - confidence / confidence_full;
 
       double self = 0.0;
-      for(int j=0; j<measurementGroupSize; j++)
+      for(int j=0; j<featureSize; j++)
       {
-        double x = point->x[i*measurementGroupSize + j];
+        double x = point->x[i*featureSize + j];
         self += x*x;
       }
       self /= (double)Nmeasurements;
