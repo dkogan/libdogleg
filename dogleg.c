@@ -1432,6 +1432,9 @@ bool dogleg_getOutliernessFactors( // output
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx )
 {
+  // This is Dima's derivation. He has reinvented Cook's distance. Only 40 years
+  // after the fact!
+  //
   // We just computed an optimum least-squares fit, and we try to determine if
   // some of the data points look like outliers.
   // The least squares problem I just solved has cost function
