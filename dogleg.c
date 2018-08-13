@@ -1195,13 +1195,13 @@ static void accum_outlierness_factor(// output
                                      int Nmeasurements)
 {
   // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-  // haven't implemented anything else yethave:
+  // have
   //
-  //   f = 1/N (xot (I + A - A inv(-I + A) A) xo )
+  //   f = 1/N (xot inv(I - A) xo )
   //
   // where A = Jo inv(JtJ) Jot
 
-  // I only implemented featureSize so far
+  // I only implemented featureSize == 1 and 2 so far.
   if(featureSize <= 1)
   {
     featureSize = 1;
@@ -1214,25 +1214,16 @@ static void accum_outlierness_factor(// output
   }
   else if(featureSize == 2)
   {
-    //   f = 1/N (xot (I + A - A inv(-I + A) A) xo ) =
-    //     = 1/N (norm2(xo) + xot A xo - (A xo)t inv(-I + A) (A xo)) =
+    //   f = 1/N (xot inv(I - A) xo )
 
-    double det = (A[0]-1.0)*(A[2]-1.0) - A[1]*A[1];
+    double det = (1.0-A[0])*(1.0-A[2]) - A[1]*A[1];
     if( fabs(det) < 1e-8 )
       *factor = DBL_MAX; // definitely an outlier
     else
     {
-      *factor = x[0]*x[0] + x[1]*x[1];
-
-      double Ax[] = {A[0]*x[0] + A[1]*x[1],
-                     A[1]*x[0] + A[2]*x[1]};
-      *factor += Ax[0]*x[0] + Ax[1]*x[1];
-
-      double inv_A1_Ax_det[] = { (A[2]-1.0)*Ax[0] - A[1]      *Ax[1],
-                                 -A[1]     *Ax[0] + (A[0]-1.0)*Ax[1] };
-
-      *factor -= (inv_A1_Ax_det[0]*Ax[0] + inv_A1_Ax_det[1]*Ax[1]) / det;
-      *factor /= (double)Nmeasurements;
+      double inv1Ax[] = {(1.0 - A[2])*x[0] + A[1]        *x[1],
+                         A[1]        *x[0] + (1.0 - A[0])*x[1]};
+      *factor = (inv1Ax[0]*x[0] + inv1Ax[1]*x[1]) / ( det * (double)Nmeasurements);
     }
   }
   else
@@ -1297,9 +1288,9 @@ static bool getOutliernessFactors_dense( // output
     }
 
     // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-    // haven't implemented anything else yethave:
+    // have
     //
-    //   f = 1/N (xot (I + A - A inv(-I + A) A) xo )
+    //   f = 1/N (xot inv(I - A) xo )
     //
     // where A = Jo inv(JtJ) Jot
     //
@@ -1392,9 +1383,9 @@ static bool getOutliernessFactors_sparse( // output
     }
 
     // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-    // haven't implemented anything else yethave:
+    // have
     //
-    //   f = 1/N (xot (I + A - A inv(-I + A) A) xo )
+    //   f = 1/N (xot inv(I - A) xo )
     //
     // where A = Jo inv(JtJ) Jot
     //
@@ -1526,15 +1517,21 @@ bool dogleg_getOutliernessFactors( // output
   //
   // So f = 1/N (xot (I + Jo M Jot - Jo M Jot inv(-I + Jo M Jot) Jo M Jot) xo )
   //
-  // Let A = Jo M Jot ->
+  // Let A = Jo M Jot
+  // Let B = inv(A-I) -> AB = BA = I+B
+  //
   //    f = 1/N (xot (I + A - A inv(-I + A) A) xo )
+  //      = 1/N (xot (I + A - A B A) xo )
+  //      = 1/N (xot (I + A - A - AB) xo )
+  //      = 1/N (xot (I + A - A - I - B) xo )
+  //      = 1/N (xot (- B) xo )
+  //      = 1/N (xot inv(I - A) xo )
   //
   // If I'm looking at a single outlier measurement then A is a scalar and
   //
-  //    f = 1/N xo^2 (A+1 - A^2/(A-1))
-  //      = 1/N xo^2 ( - 1/(A-1)) =
-  //      = xo^2 / ( N* (1-A)) =
-  //      = xo^2 / ( N* (1 - jt inv(JtJ) j))
+  //    f = 1/N (xot inv(I - A) xo )
+  //      = xo^2 /( N * (1 - A) ) =
+  //      = xo^2 /( N * (1 - jt inv(JtJ) j) ) =
   //
   // I just solved the nonlinear optimization problem, so I already have
   // inv(JtJ). And for any one measurement, the outlier factor is
@@ -1637,7 +1634,9 @@ bool dogleg_getOutliernessFactors( // output
             "jslices = [J%1$d[imeas0[i]:(imeas0[i]+featureSize), :] for i in xrange(Nfeatures)]\n"
             "xslices = [x%1$d[imeas0[i]:(imeas0[i]+featureSize)   ] for i in xrange(Nfeatures)]\n"
             "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+featureSize)]) for i in xrange(Nfeatures)]\n"
-            "factors_ref = np.array([nps.inner(xslices[i], nps.matmult(np.eye(featureSize) + A[i] - nps.matmult(A[i], np.linalg.solve(A[i]-np.eye(featureSize),A[i])), nps.transpose(xslices[i])).ravel()) for i in xrange(Nfeatures)]) / Nmeasurements\n",
+            "factors_ref = np.array([nps.inner(xslices[i],"
+            "                                  np.linalg.solve(np.eye(featureSize)-A[i],nps.transpose(xslices[i])).ravel())"
+            "                        for i in xrange(Nfeatures)]) / Nmeasurements\n",
             count);
 
     fprintf(fp, "print 'normdiff: {}'.format(np.linalg.norm(factors_ref-factors_got))\n");
