@@ -1662,6 +1662,190 @@ bool dogleg_getOutliernessFactors( // output
   return result;
 }
 
+double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
+                                                    int istateActive,
+                                                    int NstateActive,
+                                                    int featureSize,
+                                                    dogleg_operatingPoint_t* point,
+                                                    dogleg_solverContext_t* ctx)
+{
+  // This is Dima's derivation. It's similar in spirit to the outlierness factor
+  // derivation in dogleg_getOutliernessFactors()
+  //
+  // I want to test the confidence of returned intrinsics by
+  //
+  // 1. Solving the optimization problem
+  //
+  // 2. Querying the solution in a way we care about to produce a new feature
+  //    group of measurements x = f - ref. We can compute J = dx/dp = df/dp. And
+  //    we presumably know something about ref: like its probability
+  //    distribution for instance. Example: we just calibrated a camera; we want
+  //    to know how confident we are about a projection in a particular spot on
+  //    the imager. I compute a projection in that spot: q = project(v). If
+  //    added to the optimization I'd get x = q - ref where 'ref' would be the
+  //    observed pixel coordinate.
+  //
+  // 3. If this new feature was added to the optimization, I can compute its
+  //    outlierness factor in the same way as before. If we have confidence
+  //    about the solution in a particular spot, then we have consensus, and it
+  //    wouldn't take much for these queries to look like outliers. Conversely,
+  //    if we aren't well-defined, thingss wouldn't look very outliery
+  //
+  // Let p,x,J represent the solution. The new feature we're adding is x* with
+  // jacobian J*. The solution would move by dp to get to the new optimum.
+  //
+  // Original solution is an optimum: Jt x = 0
+  //
+  // The problem including the new point is also at an optimum:
+  //
+  // E* = norm2(x(p+dp)) + norm2(x*(p+dp))
+  //    = norm2(x + J dp) + norm2(x* + J* dp)
+  // dE*/dp = 0 -> 0 = Jt x + JtJ dp + J*t x* + J*tJ*dp =
+  //                 = JtJ dp + J*t x* + J*t J*dp
+  // -> dp = -inv(JtJ + J*tJ*) J*t x*
+  //
+  // Let M = inv(JtJ).
+  // Woodbury identity:
+  // dp = -(M - M J*t inv(I + J* M J*t) J* M ) J*t x*
+  //
+  // Let A = J* M J*t and B = inv(I+A) -> AB = BA = I-B
+  //
+  // dp = -M J*t x* + M J*t B A x*
+  //    = -M J*t x* + M J*t x* - M J*t B x*
+  //    = -M J*t B x*
+  //
+  // The outlierness factor is
+  //
+  // f = (norm2(x + Jdp) + norm2(x* + J* dp))/(N+1) - norm2(x)/N
+  //   ~ 1/N ( norm2(x + Jdp) + norm2(x* + J* dp) - norm2(x) )
+  //   = 1/N ( norm2( Jdp) + norm2(x*) + 2 inner(x*, J* dp) + norm2(J* dp) )
+  //
+  // norm2(Jdp) = dpt JtJ dp. From above:
+  // JtJ dp + J*t x* + J*t J*dp = 0 -> JtJ dp = -J*t x* - J*t J*dp
+  //
+  // So norm2(Jdp) = -dpt (J*t x* + J*t J*dp)
+  // And
+  //
+  // f = 1/N ( -dpt (J*t x* + J*t J*dp) + norm2(x*) + 2 inner(x*, J* dp) + norm2(J* dp) )
+  //   = 1/N ( norm2(x*) + inner(x*, J* dp) )
+  //   = 1/N ( norm2(x*) + inner(x*, J* (-M J*t B x*)) )
+  //   = 1/N ( norm2(x*) + inner(x*, (-A B x*)) )
+  //   = 1/N x*t ( I + -A B) x* =
+  //   = 1/N x*t ( I + -I + B) x* =
+  //   = 1/N x*t B x*
+  //   = 1/N x*t inv(I+A) x*
+  //   = 1/N x*t inv(I + J* M J*t) x*
+  //   = 1/N x*t inv(I + J* inv(JtJ) J*t) x*
+  //
+  // As expected, this is pretty similar to the outlier rejection case
+  //
+  // This is the the "self+others" error difference. What's the "others"
+  // difference?
+  //
+  // f = norm2(x + Jdp)/(N+1) - norm2(x)/N
+  //   ~ 1/N ( norm2(x + Jdp) - norm2(x) )
+  //   = 1/N ( norm2( Jdp)  )
+  //   = 1/N ( dpt JtJ dp )
+  //   = 1/N ( x*t B J* M JtJ M J*t B x* )
+  //   = 1/N ( x*t B J* M J*t B x* )
+  //   = 1/N ( x*t B A B x* )
+  //   = 1/N x*t (B - B^2) x*
+  //
+  //
+  // For the "self+others" factor I need x* and inv(I + J* inv(JtJ) J*t). For a
+  // quadratic form I can compute the expected value E(x*t C x) = trace(C
+  // Var(x*)). I'm going to assume that x* are all independent and identical, so
+  // Var(x*) is proportional to the identity, and E(x*t C x) = trace(C) vx*. I
+  // thus let the caller deal with the variance, and I just return
+  //
+  // trace(inv(I + J* inv(JtJ) J*t))
+
+  //   A = J* inv(JtJ) J*t ->
+  //   B = inv(I + A)      ->
+  //   tr(B) = (2+a00+a11) / ((1+a00)*(1+a11) - a01^2)
+
+  // This is Jt because cholmod thinks in terms of col-first instead of
+  // row-first
+  int Jt_p[featureSize+1];
+  int Jt_i[NstateActive*featureSize];
+  for(int i=0; i<=featureSize; i++)
+  {
+    Jt_p[i] = i*NstateActive;
+    if(i==featureSize) break;
+    for(int j=0; j<NstateActive; j++)
+      Jt_i[j + i*NstateActive] = istateActive + j;
+  }
+  cholmod_sparse Jt_query_sparse = {.nrow   = ctx->Nstate,
+                                    .ncol   = featureSize,
+                                    .nzmax  = NstateActive*featureSize,
+                                    .p      = (void*)Jt_p,
+                                    .i      = (void*)Jt_i,
+                                    .x      = (double*)JqueryFeature,
+                                    .sorted = 1,
+                                    .packed = 1,
+                                    .stype  = 0, // NOT symmetric
+                                    .itype  = CHOLMOD_INT,
+                                    .xtype  = CHOLMOD_REAL,
+                                    .dtype  = CHOLMOD_DOUBLE};
+
+  // Really shouldn't need to do this every time. In fact I probably don't need
+  // to do it at all, since this will have been done by the solver during the
+  // last step
+  dogleg_computeJtJfactorization( point, ctx );
+  cholmod_sparse* invJtJ_Jp =
+    cholmod_spsolve(CHOLMOD_A,
+                    ctx->factorization,
+                    &Jt_query_sparse,
+                    &ctx->common);
+
+  // Now I need trace(matmult(Jquery, invJtJ_Jp))
+
+  // haven't implemented anything else yet
+  ASSERT(featureSize == 2);
+  double A[4] = {}; // gah. only elements 0,1,3 will be stored.
+
+  for(int i=0; i<featureSize; i++)
+  {
+    for(unsigned int j=P(invJtJ_Jp, i); j<P(invJtJ_Jp, i+1); j++)
+    {
+      int row = I(invJtJ_Jp, j);
+      if(row >= istateActive)
+      {
+        if(row >= istateActive+NstateActive)
+          break;
+
+        int ic0 = i*featureSize;
+        for(int k=i; k<featureSize; k++) // computing one triangle
+          A[ic0+k] += X(invJtJ_Jp, j)*JqueryFeature[row-istateActive + k*NstateActive];
+      }
+    }
+  }
+
+  cholmod_free_sparse(&invJtJ_Jp, &ctx->common);
+
+  double invB00 = A[0]+1.0;
+  double invB01 = A[1];
+  double invB11 = A[3]+1.0;
+
+  double det_invB_recip = 1.0/(invB00*invB11 - invB01*invB01);
+  double B00 =  invB11 * det_invB_recip;
+  double B11 =  invB00 * det_invB_recip;
+
+  __attribute__((unused))
+  double B01 = -invB01 * det_invB_recip;
+
+  // The "self+others" outlierness factor needs to return tr(B). The "others"
+  // outlierness factor needs to return is tr(B-B^2)
+
+  // tr( [a b; b c]^2 ) = a^2 + 2b^2 + c^2
+
+  // Empirically, it looks like the "self+others" outlierness factor contains
+  // about as much information as the "others" one, so I return the
+  // "self+others" factor
+  return B00 + B11;
+  // return B00 + B11 - (B00*B00 + 2*B01*B01 + B11*B11);
+}
+
 
 
 #define OUTLIER_N_STDEVS_THRESHOLD        4
