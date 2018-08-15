@@ -201,6 +201,7 @@ bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
                          // output only
                          int* Noutliers,
+                         double* mean, double* stdev,
 
                          // input
                          double (getConfidence)(int i_feature_exclude),

@@ -1853,6 +1853,9 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
 static void markPotentialOutliers(// output, input
                                   struct dogleg_outliers_t* markedOutliers,
 
+                                  // output. statistics of the outlier factors
+                                  double* mean_out, double* stdev_out,
+
                                   // input
                                   const double* factors,
                                   int Nfeatures)
@@ -1866,8 +1869,9 @@ static void markPotentialOutliers(// output, input
     double outlierness_sum              = 0.0;
 
     int N_in_statistics = 0;
+    // Compute the CURRENT mean/stdev of all my outlier factors. I do this in 2
+    // passes. I like my floating-point precision
     {
-        // I do this in 2 passes. I like my floating-point precision
         for(int i=0; i<Nfeatures; i++)
         {
             if(markedOutliers[i].marked)
@@ -1961,12 +1965,16 @@ static void markPotentialOutliers(// output, input
                            i, mean, var);
         }
     } while(markedAnyPotential);
+
+    *mean_out  = outlierness_sum /(double)N_in_statistics;
+    *stdev_out = sqrt( outlierness_sum_sq_diff_mean /(double)N_in_statistics );
 }
 
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
                          // output only
                          int* Noutliers,
+                         double* mean, double* stdev,
 
                          // input
                          double (getConfidence)(int i_feature_exclude),
@@ -2014,7 +2022,7 @@ bool dogleg_markOutliers(// output, input
     if(!dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx))
         goto done;
 
-    markPotentialOutliers( markedOutliers,
+    markPotentialOutliers( markedOutliers, mean, stdev,
                            factors, Nfeatures);
 
 
