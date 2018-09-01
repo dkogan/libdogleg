@@ -1515,6 +1515,7 @@ static bool getOutliernessFactors_dense( // output
                                         // the feature size is set here
                                         int featureSize,
                                         int Nfeatures,
+                                        int NoutlierFeatures,
                                         const dogleg_operatingPoint_t* point,
                                         dogleg_solverContext_t* ctx )
 {
@@ -1544,9 +1545,10 @@ static bool getOutliernessFactors_dense( // output
   }
 
   // see big comment above
+  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
   double scale =
-    (double)Nmeasurements /
-    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements - Nstate - 1)));
+    (double)(Nmeasurements_nonoutliers) /
+    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -1605,6 +1607,7 @@ static bool getOutliernessFactors_sparse( // output
                                          // the feature size is set here
                                          int featureSize,
                                          int Nfeatures,
+                                         int NoutlierFeatures,
                                          const dogleg_operatingPoint_t* point,
                                          dogleg_solverContext_t* ctx )
 {
@@ -1640,9 +1643,10 @@ static bool getOutliernessFactors_sparse( // output
   }
 
   // see big comment above
+  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
   double scale =
-    (double)Nmeasurements /
-    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements - Nstate - 1)));
+    (double)(Nmeasurements_nonoutliers) /
+    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -1709,6 +1713,7 @@ bool dogleg_getOutliernessFactors( // output
                                   // feature size is set here
                                   int featureSize,
                                   int Nfeatures,
+                                  int NoutlierFeatures, // how many outliers we already have
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx )
 {
@@ -1718,9 +1723,9 @@ bool dogleg_getOutliernessFactors( // output
   dogleg_computeJtJfactorization( point, ctx );
   bool result;
   if(ctx->is_sparse)
-    result = getOutliernessFactors_sparse(factors, featureSize, Nfeatures, point, ctx);
+    result = getOutliernessFactors_sparse(factors, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
   else
-    result = getOutliernessFactors_dense(factors, featureSize, Nfeatures, point, ctx);
+    result = getOutliernessFactors_dense(factors, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
 
 #if 0
   if( result )
@@ -1786,6 +1791,7 @@ bool dogleg_getOutliernessFactors( // output
     fprintf(fp, "Nstate = %d\n", Nstate);
     fprintf(fp, "Nfeatures = %d\n", Nfeatures);
     fprintf(fp, "featureSize = %d\n", featureSize);
+    fprintf(fp, "NoutlierFeatures = %d\n", NoutlierFeatures);
 
     fprintf(fp, "factors_got = np.array((");
     for(int j=0;j<Nfeatures;j++)
@@ -1793,7 +1799,8 @@ bool dogleg_getOutliernessFactors( // output
     fprintf(fp,"))\n");
 
     fprintf(fp,
-            "scale = Nmeasurements / (4.*((Nstate+1.) * nps.inner(x%1$d,x%1$d)/(Nmeasurements - Nstate - 1.)))\n"
+            "Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize\n"
+            "scale = Nmeasurements_nonoutliers / (4.*((Nstate+1.) * nps.inner(x%1$d,x%1$d)/(Nmeasurements_nonoutliers - Nstate - 1.)))\n"
             "pinvj = np.linalg.pinv(J%1$d)\n"
             "imeas0 = [featureSize*i for i in xrange(Nfeatures)]\n"
             "jslices = [J%1$d[imeas0[i]:(imeas0[i]+featureSize), :] for i in xrange(Nfeatures)]\n"
@@ -1829,6 +1836,7 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
                                                     int istateActive,
                                                     int NstateActive,
                                                     int featureSize,
+                                                    int NoutlierFeatures,
                                                     dogleg_operatingPoint_t* point,
                                                     dogleg_solverContext_t* ctx)
 {
@@ -2003,143 +2011,23 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
 #endif
 
 
-  // see big comment above
+  int Nmeasurements = ctx->Nmeasurements;
+  int Nstate        = ctx->Nstate;
+
+  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
   double scale =
-    (double)ctx->Nmeasurements /
-    (4.*((double)(ctx->Nstate+1) * point->norm2_x/(double)(ctx->Nmeasurements - ctx->Nstate - 1)));
+    (double)(Nmeasurements_nonoutliers) /
+    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
 
   return scale * traceB;
 }
 
 
-
-#define OUTLIER_N_STDEVS_THRESHOLD        4
 #define OUTLIER_CONFIDENCE_DROP_THRESHOLD 0.05
-static void markPotentialOutliers(// output, input
-                                  struct dogleg_outliers_t* markedOutliers,
-
-                                  // output. statistics of the outlier factors
-                                  double* mean_out, double* stdev_out,
-
-                                  // input
-                                  const double* factors,
-                                  int Nfeatures)
-{
-    // I have the outlier factors. How outliery is too outliery? Currently I
-    // look at the distribution of the outlier factors across my dataset,
-    // and focus on those measurements whose outlier factors are outliers.
-    //
-    // First, compute the mean, variance of the factors
-    double outlierness_sum_sq_diff_mean = 0.0;
-    double outlierness_sum              = 0.0;
-
-    int N_in_statistics = 0;
-    // Compute the CURRENT mean/stdev of all my outlier factors. I do this in 2
-    // passes. I like my floating-point precision
-    {
-        for(int i=0; i<Nfeatures; i++)
-        {
-            if(markedOutliers[i].marked)
-                // this feature has already been designated an outlier
-                continue;
-            if( factors[i] == DBL_MAX )
-            {
-                // it's an outlier, but I don't want to include it in my
-                // statistics, since it'll break them
-                markedOutliers[i].markedPotential = true;
-                continue;
-            }
-            markedOutliers[i].markedPotential = false;
-            outlierness_sum += factors[i];
-            N_in_statistics++;
-        }
-        double mean = outlierness_sum / (double)N_in_statistics;
-
-        for(int i=0; i<Nfeatures; i++)
-        {
-            if(markedOutliers[i].marked)
-                // this feature has already been designated an outlier
-                continue;
-            if( factors[i] == DBL_MAX )
-                // it's an outlier, but I don't want to include it in my
-                // statistics, since it'll break them
-                continue;
-
-            double d = factors[i] - mean;
-            outlierness_sum_sq_diff_mean += d*d;
-        }
-    }
-
-    // Everything with an outlier factor at least X standard deviations
-    // above the mean is considered a candidate outlier. Throwing each of
-    // these out I recompute the mean and standard deviation to find more
-    // points X standard deviations above the mean. I keep marking potential
-    // outliers in this way, updating the variance, stdev with each pass. I
-    // keep going until no more potential outliers are marked. I update the
-    // variance and stdev with each pass because each outlier can have a
-    // strong effect on these statistics
-    bool markedAnyPotential;
-    do
-    {
-        markedAnyPotential = false;
-
-        double mean = outlierness_sum              /(double)N_in_statistics;
-        double var  = outlierness_sum_sq_diff_mean /(double)N_in_statistics;
-        SAY_IF_VERBOSE("have outlierness mean,var: %g,%g", mean, var);
-
-        for(int i=0; i<Nfeatures; i++)
-        {
-            if( markedOutliers[i].marked ||
-                markedOutliers[i].markedPotential)
-                continue;
-
-            double d = factors[i] - mean;
-            if( d < 0.0 || d*d < (double)(OUTLIER_N_STDEVS_THRESHOLD*OUTLIER_N_STDEVS_THRESHOLD) * var )
-                continue;
-
-            // Outlierness factor is above X standard deviations above the mean.
-            // Potential outlier
-            outlierness_sum -= factors[i];
-
-            // what happens to a variance when we remove a measurement xo?
-            //
-            // VN  = sum( (xi-m)^2 ) =
-            //     = sum( xi^2 - 2xi m + m^2 )
-            //     = sum( xi^2 )- N m^2
-            //
-            // VN'= sum( (xi-m')^2 )
-            //    = sum( xi^2 - 2xi m' + m'^2 )
-            //    = sum( xi^2 ) - xo^2 - (N-1) (m')^2
-            //    = VN + N m^2 - xo^2 - (N-1) (m')^2
-            //    = VN - xo^2 - (S-xo)^2/(N-1) + S^2/N
-            //    = VN - xo^2  + (S^2 N - S^2 - S^2 N + 2 S xo N - xo^2 N )/(N-1)/N
-            //    = VN - xo^2  - (S^2 - 2 S xo N + xo^2 N )/(N-1)/N
-            //    = VN - ( xo^2 N^2 - xo^2* N + S^2 - 2 S xo N + xo^2 N )/(N-1)/N
-            //    = VN - ( xo^2 N^2 + S^2 - 2 S xo N )/(N-1)/N
-            //    = VN - ( N xo - S )^2/(N-1)/N
-            d = outlierness_sum - factors[i]*(double)(N_in_statistics-1);
-            outlierness_sum_sq_diff_mean -= d*d/(double)((N_in_statistics-1)*N_in_statistics);
-
-            N_in_statistics--;
-            markedAnyPotential                = true;
-            markedOutliers[i].markedPotential = true;
-
-            mean = outlierness_sum              / (double)N_in_statistics;
-            var  = outlierness_sum_sq_diff_mean / (double)N_in_statistics;
-            SAY_IF_VERBOSE("New potential outlier feature: %d. new mean,var: %g,%g",
-                           i, mean, var);
-        }
-    } while(markedAnyPotential);
-
-    *mean_out  = outlierness_sum /(double)N_in_statistics;
-    *stdev_out = sqrt( outlierness_sum_sq_diff_mean /(double)N_in_statistics );
-}
-
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
-                         // output only
+                         // output, input
                          int* Noutliers,
-                         double* mean, double* stdev,
 
                          // input
                          double (getConfidence)(int i_feature_exclude),
@@ -2164,17 +2052,15 @@ bool dogleg_markOutliers(// output, input
         goto done;
     }
 
-    if(!dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx))
+    if(!dogleg_getOutliernessFactors(factors, featureSize, Nfeatures,
+                                     *Noutliers,
+                                     point, ctx))
         goto done;
 
-    markPotentialOutliers( markedOutliers, mean, stdev,
-                           factors, Nfeatures);
-
-
-    // OK then. I have my list of POTENTIAL outliers. These all have
-    // suspicious outlierness factors. I check to see how much confidence I
-    // would lose if I were to throw out any of these measurements, and
-    // accept the outlier ONLY if the confidence loss is acceptable
+    // I have my list of POTENTIAL outliers (any that have factor > 1.0). I
+    // check to see how much confidence I would lose if I were to throw out any
+    // of these measurements, and accept the outlier ONLY if the confidence loss
+    // is acceptable
     double confidence0 = getConfidence(-1);
     if( confidence0 < 0.0 )
         return false;
@@ -2189,7 +2075,7 @@ bool dogleg_markOutliers(// output, input
           (*Noutliers)++;
           continue;
         }
-        if(!markedOutliers[i].markedPotential)
+        if(factors[i] < 1.0)
             continue;
 
         // Looking at potential new outlier
@@ -2230,6 +2116,7 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
                             // feature size is set here
                             int featureSize,
                             int Nfeatures,
+                            int Noutliers, // how many outliers we already have
 
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx)
@@ -2244,7 +2131,7 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
         goto done;
     }
 
-    dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx);
+    dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, Noutliers, point, ctx);
 
     SAY("## Outlier statistics");
     SAY("# i_feature outlier_factor confidence_drop_relative_if_removed");

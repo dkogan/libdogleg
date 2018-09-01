@@ -185,6 +185,7 @@ bool dogleg_getOutliernessFactors( // output
                                   // stated here
                                   int featureSize,
                                   int Nfeatures,
+                                  int NoutlierFeatures, // how many outliers we already have
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx );
 
@@ -194,14 +195,12 @@ bool dogleg_getOutliernessFactors( // output
 // This stuff is experimental, and subject to change.
 struct dogleg_outliers_t
 {
-    char marked            : 1;
-    char markedPotential   : 1;
+    char marked : 1;
 };
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
-                         // output only
-                         int* Noutliers,
-                         double* mean, double* stdev,
+                         // output, input
+                         int* Noutliers, // number of outliers before and after this call
 
                          // input
                          double (getConfidence)(int i_feature_exclude),
@@ -220,6 +219,7 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
                             // is stated here
                             int featureSize,
                             int Nfeatures,
+                            int Noutliers, // how many outliers we already have
 
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx);
@@ -228,5 +228,6 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
                                                     int istateActive,
                                                     int NstateActive,
                                                     int featureSize,
+                                                    int NoutlierFeatures,
                                                     dogleg_operatingPoint_t* point,
                                                     dogleg_solverContext_t* ctx);
