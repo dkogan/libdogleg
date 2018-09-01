@@ -1493,9 +1493,29 @@ static void accum_outlierness_factor(// output
     }
     else
     {
-      double inv1Ax[] = {(1.0 - A[2])*x[0] + A[1]        *x[1],
-                         A[1]        *x[0] + (1.0 - A[0])*x[1]};
-      *factor = (inv1Ax[0]*x[0] + inv1Ax[1]*x[1]) / det;
+      double B00_det =  A[2] - 1.0;
+      double B11_det =  A[0] - 1.0;
+      double B01_det = -A[1];
+
+      // inner(x, Bx)
+      double xBx =
+        (x[0]*x[0]*B00_det       +
+         x[0]*x[1]*B01_det * 2.0 +
+         x[1]*x[1]*B11_det) / det;
+
+      // norm2(Bx)
+      __attribute__((unused)) double v1 = x[0]*B00_det + x[1]*B01_det;
+      __attribute__((unused)) double v2 = x[0]*B01_det + x[1]*B11_det;
+      __attribute__((unused)) double xBBx = (v1*v1 + v2*v2) / (det*det);
+
+      // mine self+others
+      *factor = -xBx;
+
+      // // mine others / cook others
+      // *factor = -(x[0]*x[0] + x[1]*x[1]) - xBx;
+
+      // // cook's self+others
+      // *factor = xBx + xBBx;
     }
   }
   else
@@ -1930,6 +1950,8 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
   __attribute__((unused))
   double B01 = -invB01 * det_invB_recip;
   double traceB = B00 + B11;
+  __attribute__((unused))
+  double traceBB = B00*B00 + 2.0*B01*B01 + B11*B11;
 
 
 #if 0
@@ -2019,7 +2041,16 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
     (double)(Nmeasurements_nonoutliers) /
     (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
 
+  // Dima's self+others
   return scale * traceB;
+
+  // // Cook's self+others
+  // return scale * (2.0 - traceB);
+
+  // // Dima's others/Cook's others
+  // // This one is non-monotonic in outlierness-test
+  // return scale * (traceB - traceBB);
+
 }
 
 
