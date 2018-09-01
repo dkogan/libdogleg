@@ -1180,26 +1180,294 @@ static cholmod_dense* pseudoinverse_J_sparse(// inputs
   return pinv;
 }
 
+
+/*
+The below is a bunch of code for outlier detection/rejection and for confidence
+evaluation. IT'S ALL EXPERIMENTAL AND SUBJECT TO CHANGE
+
+What is an outlier? Suppose I just found an optimum. I define an outlier as an
+observation that does two things to the problem if I remove that observation:
+
+1. The cost function would improve significantly. Things would clearly improve
+   because the cost function contribution of the removed point itself would get
+   removed, but ALSO because the parameters could fit the remaining data better
+   without that extra observation; the "outlier" wouldn't pull the solution away
+   from the "true" optimum.
+
+2. The confidence of the solution does not significantly decrease. One could
+   imagine a set of data that define the problem poorly, and produce a low cost
+   function value for some (overfit) set of parameters. And one can imagine an
+   extra point being added that defines the problem and increases the confidence
+   of the solution. This extra point would suppress the overfitting, so this
+   extra point would increase the cost function value. Condition 1 above would
+   make this extra point look like an outlier, and this condition is meant to
+   detect this case and to classify this point as NOT an outlier
+
+Let's say we just computed an optimum least-squares fit, and we try to determine
+if some of the data points look like outliers. The least squares problem I just
+solved has cost function
+
+  E = norm2(x)
+
+where x is a length-N vector of measurements. We solved it by optimizing the
+vector of parameters p. We're at an optimum, so dE/dp = 0 -> Jt x = 0
+
+We define an outlier as a measurement that would greatly improve the cost
+function E if this measurement was removed, and the problem was re-optimized.
+
+Let's say the problem is locally linear (J = dx/dp is constant), and let's say
+re-optimizing moves the parameter by dp. The original cost function was
+
+  E0 = norm2(x)
+
+If we move by dp, and take away the outlier's own cost, we get
+
+  E1 = norm2(x + J dp) - norm2( x* + J* dp )
+
+where x* and J* refer to the outlier measurements. Thus "Dima's self+others
+factor" is norm2(x) - (norm2(x + J dp) - norm2( x* + J* dp )) =
+
+We can choose to look at ONLY the effect on the other variables. That would
+produce "Dima's others factor" = norm2(x)-norm2(x*) - (norm2(x + J dp) -
+norm2(x* + J* dp ))
+
+This is very similar to Cook's D factor (which Dima apparently reinvented 40
+years after the fact!). This factor looks not at the difference of norm2(x), but
+at norm2(difference) instead. So "Cook's self+others factor" is proportional to
+norm2(x - (x+J dp)). This is the "normal" Cook's D factor. We can also compute
+"Cook's others factor": norm2(x - vec(x*) - (x + J dp -(vec(x*) + full(J*) dp)))
+= norm2( - J dp + full(J*) dp) = norm2(J dp) + norm2(full(J*) dp) -2 dpt(Jt
+full(J*) + full(J*)tJ)dp = norm2(J dp) + norm2(full(J*) dp) -2 dpt(Jt full(J*) +
+full(J*)tJ)dp = norm2(J dp) + norm2(J* dp) - 2 norm2(J* dp) = norm2(J dp) -
+norm2(J* dp)
+
+This is 4 flavors of a very similar computation. In summary (and ignoring scale
+factors):
+
+  Dima's self+others: -norm2(J dp) + 2 x*t J* dp + norm2(J* dp) + norm2(x*)
+  Dima's others     : -norm2(J dp) + 2 x*t J* dp + norm2(J* dp)
+  Cook's self+others: norm2(J dp)
+  Cook's others     : norm2(J dp) - norm2(J* dp)
+
+Let's compute these. dE1/dp = 0 at p+dp ->
+
+  0 = Jt x + JtJ dp - J*t x* - J*tJ* dp
+    =        JtJ dp - J*t x* - J*tJ* dp
+
+-> dp = inv(JtJ - J*tJ*) J*t x*
+
+Woodbury identity:
+
+  inv(JtJ - J*t J*) =
+  = inv(JtJ) - inv(JtJ) J*t inv(-I + J* inv(JtJ) J*t) J* inv(JtJ)
+
+Let
+  A = J* inv(JtJ) J*t
+  B = inv(A - I)
+
+So
+  AB = BA = I+B
+
+Thus
+  inv(JtJ - J*t J*) =
+  = inv(JtJ) - inv(JtJ) J*t B J* inv(JtJ)
+
+and
+
+  dp = inv(JtJ - J*tJ*) J*t x* =
+     = inv(JtJ)J*t x* - inv(JtJ) J*t B J* inv(JtJ) J*t x*
+     = inv(JtJ)J*t x* - inv(JtJ) J*t B A x*
+     = inv(JtJ)J*t(I - B A) x*
+     = -inv(JtJ)J*t B x*
+
+Then
+
+  norm2(J dp) = x*t ( B J* inv() Jt J inv() J*t B ) x*
+              = x*t ( B J* inv() J*t B ) x*
+              = x*t ( B A B ) x*
+              = x*t ( B + B*B ) x*
+
+  2 x*t J* dp = -2 x*t J* inv(JtJ)J*t B x* =
+              = -2 x*t A B x* =
+              = x*t (-2AB) x* =
+              = x*t (-2I - 2B) x* =
+
+  norm2(J* dp) = x*t ( B J* inv() J*tJ* inv() J*t B ) x* =
+               = x*t ( B A A B ) x* =
+               = x*t ( I + 2B + B*B ) x*
+
+  norm2(x*)    = x*t ( I ) x*
+
+Putting all this together I get the expressions for the factors above:
+
+  Dima's self+others: x*t (-B      ) x*
+  Dima's others     : x*t (-B - I  ) x*
+  Cook's self+others: x*t ( B + B*B) x*
+  Cook's others     : x*t (-B - I  ) x*
+
+One can also do a similar analysis to gauge our confidence in a solution. We can
+do this by
+
+1. Solving the optimization problem
+
+2. Querying the solution in a way we care about to produce a new feature
+   group of measurements x = f - ref. We can compute J = dx/dp = df/dp. And
+   we presumably know something about ref: like its probability
+   distribution for instance. Example: we just calibrated a camera; we want
+   to know how confident we are about a projection in a particular spot on
+   the imager. I compute a projection in that spot: q = project(v). If
+   added to the optimization I'd get x = q - ref where 'ref' would be the
+   observed pixel coordinate.
+
+3. If this new feature was added to the optimization, I can compute its
+   outlierness factor in the same way as before. If we are confident in the
+   solution in a particular spot, then we have consensus, and it wouldn't take
+   much for these queries to look like outliers: the expected value of the
+   outlierness would be high. Conversely, if we aren't well-defined then a wider
+   set of points would fit the solution, and things wouldn't look very outliery
+
+Very similar analysis to the above:
+
+Let p,x,J represent the solution. The new feature we're adding is x* with
+jacobian J*. The solution would move by dp to get to the new optimum.
+
+Original solution is an optimum: Jt x = 0
+
+If we add x* and move by dp, we get
+
+  E1 = norm2(x + J dp) + norm2( x* + J* dp )
+
+where x* and J* refer to the new measurements. Thus "Dima's self+others factor"
+is (norm2(x + J dp) + norm2( x* + J* dp )) - norm2(x) = norm2(Jdp) + norm2( x* +
+J* dp )
+
+We can choose to look at ONLY the effect on the other variables. That would
+produce "Dima's others factor" norm2(x + J dp) - norm2(x) = norm2(Jdp)
+
+This is very similar to Cook's D factor (which Dima apparently reinvented 40
+years after the fact!). This factor looks not at the difference of norm2(x), but
+at norm2(difference) instead. So "Cook's others factor" is proportional to
+norm2(x - (x+J dp)). This is the "normal" Cook's D factor. We can also compute
+"Cook's self+others factor": norm2(concat(x + J dp, x* + J* dp) - concat(x,x*))
+= norm2(x + J dp-x) + norm2(x* + J* dp - x*) = norm2(J dp) + norm2(J* dp)
+
+This is 4 flavors of a very similar computation. In summary (and ignoring scale
+factors):
+
+  Dima's self+others: norm2(J dp) + 2 x*t J* dp + norm2(J* dp) + norm2(x*)
+  Dima's others     : norm2(J dp)
+  Cook's self+others: norm2(J dp) + norm2(J* dp)
+  Cook's others     : norm2(J dp)
+
+The problem including the new point is also at an optimum:
+
+  E1 = norm2(x + J dp) + norm2( x* + J* dp )
+  dE1/dp = 0 -> 0 = Jt x + JtJ dp + J*t x* + J*tJ*dp =
+                  =        JtJ dp + J*t x* + J*tJ*dp
+-> dp = -inv(JtJ + J*tJ*) J*t x*
+
+Woodbury identity:
+
+  -inv(JtJ + J*t J*) =
+  = -inv(JtJ) + inv(JtJ) J*t inv(I + J* inv(JtJ) J*t) J* inv(JtJ)
+
+Let
+  A = J* inv(JtJ) J*t   (same as before)
+  B = inv(A + I)        (NOT the same as before)
+
+So
+  AB = BA = I-B
+
+Thus
+  -inv(JtJ + J*t J*) =
+  = -inv(JtJ) + inv(JtJ) J*t B J* inv(JtJ)
+
+and
+
+  dp = -inv(JtJ + J*tJ*) J*t x* =
+     = -inv(JtJ)J*t x* + inv(JtJ) J*t B J* inv(JtJ) J*t x* =
+     = -inv(JtJ)J*t x* + inv(JtJ) J*t B A x*
+     = -inv(JtJ)J*t(I - B A) x*
+     = -inv(JtJ)J*t B x*   (same as before, but with a different B!)
+
+Then
+
+  norm2(J dp) = x*t ( B J* inv() Jt J inv() J*t B ) x*
+              = x*t ( B J* inv() J*t B ) x*
+              = x*t ( B A B ) x*
+              = x*t ( B - B*B ) x*
+
+  2 x*t J* dp = -2 x*t J* inv(JtJ)J*t B x* =
+              = -2 x*t A B x* =
+              = x*t (-2AB) x* =
+              = x*t (-2I + 2B) x* =
+
+  norm2(J* dp) = x*t ( B J* inv() J*tJ* inv() J*t B ) x* =
+               = x*t ( B A A B ) x* =
+               = x*t ( I - 2B + B*B ) x*
+
+  norm2(x*)    = x*t ( I ) x*
+
+Putting all this together I get the expressions for the factors above:
+
+  Dima's self+others: x*t (B      ) x*
+  Dima's others     : x*t (B - B*B) x*
+  Cook's self+others: x*t (I - B  ) x*
+  Cook's others     : x*t (B - B*B) x*
+
+These expressions are all tested and verified in
+mrcal/analyses/outlierness-test.py
+
+
+There're several slightly-different definitions of Cook's D and of a
+rule-of-thumb threshold floating around on the internet. Wikipedia says:
+
+  D = norm2(x_io - x_i)^2 / (Nstate * norm2(x_io)/(Nmeasurements - Nstate))
+  D_threshold = 1
+
+An article https://www.nature.com/articles/nmeth.3812 says
+
+  D = norm2(x_io - x_i)^2 / ((Nstate+1) * norm2(x_io)/(Nmeasurements - Nstate -1))
+  D_threshold = 4/Nmeasurements
+
+I haven't tracked down the reference for this second definition, but it looks
+more reasonable, and I use it here.
+
+Here I use the second definition. That definition expands to
+
+  k = xo^2 / ((Nstate+1) * norm2(x)/(Nmeasurements - Nstate -1))
+  B = 1.0/(jt inv(JtJ) j - 1)
+  f = k * (B + B*B)
+
+I report normalized outlierness factors so that the threshold is 1. Thus I use
+
+  k = Nmeasurements / (4*((Nstate+1) * norm2(x)/(Nmeasurements - Nstate - 1)))
+
+*/
+
+
 static void accum_outlierness_factor(// output
                                      double* factor,
 
                                      // inputs
                                      const double* x,
 
-                                     // A is symmetric. I store the upper triangle
+                                     // A is symmetric. I store the upper triangle row-first
                                      const double* A,
 
                                      // if outliers are grouped into features, the
                                      // feature size is set here
                                      int featureSize,
-                                     int Nmeasurements)
+                                     double k)
 {
-  // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-  // have
+  // This implements Dima's self+outliers factor.
   //
-  //   f = 1/N (xot inv(I - A) xo )
+  // from the derivation in a big comment above I have
   //
-  // where A = Jo inv(JtJ) Jot
+  //   f = k (x*t (-B) x* )
+  //
+  // where B = inv(A - I) and
+  //       A = J* inv(JtJ) J*t
 
   // I only implemented featureSize == 1 and 2 so far.
   if(featureSize <= 1)
@@ -1208,22 +1476,26 @@ static void accum_outlierness_factor(// output
 
     double denom = 1.0 - *A;
     if( fabs(denom) < 1e-8 )
+    {
       *factor = DBL_MAX; // definitely an outlier
+      return;
+    }
     else
-      *factor = x[0]*x[0] / (denom * (double)Nmeasurements);
+      *factor = x[0]*x[0] / denom;
   }
   else if(featureSize == 2)
   {
-    //   f = 1/N (xot inv(I - A) xo )
-
     double det = (1.0-A[0])*(1.0-A[2]) - A[1]*A[1];
     if( fabs(det) < 1e-8 )
+    {
       *factor = DBL_MAX; // definitely an outlier
+      return;
+    }
     else
     {
       double inv1Ax[] = {(1.0 - A[2])*x[0] + A[1]        *x[1],
                          A[1]        *x[0] + (1.0 - A[0])*x[1]};
-      *factor = (inv1Ax[0]*x[0] + inv1Ax[1]*x[1]) / ( det * (double)Nmeasurements);
+      *factor = (inv1Ax[0]*x[0] + inv1Ax[1]*x[1]) / det;
     }
   }
   else
@@ -1231,6 +1503,8 @@ static void accum_outlierness_factor(// output
     SAY("featureSize > 2 not implemented yet. Got featureSize=%d", featureSize);
     ASSERT(0);
   }
+
+  *factor *= k;
 }
 
 static bool getOutliernessFactors_dense( // output
@@ -1269,6 +1543,11 @@ static bool getOutliernessFactors_dense( // output
     goto done;
   }
 
+  // see big comment above
+  double scale =
+    (double)Nmeasurements /
+    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements - Nstate - 1)));
+
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
   int i_measurement = 0;
@@ -1287,8 +1566,7 @@ static bool getOutliernessFactors_dense( // output
       i_measurement_valid_chunk_last  = i_measurement+chunk_size-1;
     }
 
-    // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-    // have
+    // from the derivation in a big comment in above I have
     //
     //   f = 1/N (xot inv(I - A) xo )
     //
@@ -1309,7 +1587,7 @@ static bool getOutliernessFactors_dense( // output
       }
     accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, featureSize, Nmeasurements);
+                             A, featureSize, scale);
   }
 
   result = true;
@@ -1361,6 +1639,11 @@ static bool getOutliernessFactors_sparse( // output
     goto done;
   }
 
+  // see big comment above
+  double scale =
+    (double)Nmeasurements /
+    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements - Nstate - 1)));
+
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
   int i_measurement = 0;
@@ -1382,8 +1665,7 @@ static bool getOutliernessFactors_sparse( // output
       i_measurement_valid_chunk_last  = i_measurement+chunk_size-1;
     }
 
-    // from the derivation in a big comment in dogleg_getOutliernessFactors() I
-    // have
+    // from the derivation in a big comment in above I have
     //
     //   f = 1/N (xot inv(I - A) xo )
     //
@@ -1409,7 +1691,7 @@ static bool getOutliernessFactors_sparse( // output
       }
     accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, featureSize, Nmeasurements);
+                             A, featureSize, scale);
   }
 
   result = true;
@@ -1419,8 +1701,6 @@ static bool getOutliernessFactors_sparse( // output
   return result;
 }
 
-// Computes outlierness factors. This function is experimental, and subject to
-// change. See comment inside function for detail.
 bool dogleg_getOutliernessFactors( // output
                                   double* factors, // Nfeatures factors
 
@@ -1432,126 +1712,6 @@ bool dogleg_getOutliernessFactors( // output
                                   dogleg_operatingPoint_t* point,
                                   dogleg_solverContext_t* ctx )
 {
-  // This is Dima's derivation. He has reinvented Cook's distance. Only 40 years
-  // after the fact!
-  //
-  // We just computed an optimum least-squares fit, and we try to determine if
-  // some of the data points look like outliers.
-  // The least squares problem I just solved has cost function
-  //
-  //   E = sum( norm2(x) )
-  //
-  // where x is a length-N vector of measurements. We solved it by optimizing
-  // the vector of parameters p. We define an outlier as a measurement that
-  // would greatly improve the MEAN cost function E/N if this measurement was
-  // removed, and the problem was re-optimized.
-  //
-  // Each measurement contributes to the cost function in two ways:
-  // - directly, with its x value
-  //
-  // - indirectly, since minimizing E for THIS measurement pulls p in a
-  //   particular direction, and without this measurement, p is more free to
-  //   move in a way that reduces errors for the other measurements
-  //
-  // We look at the total cost of a particular measurement, by looking at the
-  // sum of these contributions. Note that this definition of an outlier has a
-  // big caveat: measurements that define the problem will look like outliers
-  // because taking them out will let the solver overfit to an
-  // artificially-low value of the cost function. The way to address this is
-  // to add another condition: a set of measurements are outliers if they have
-  // a large outlierness factor AND if removing it doesn't cause a large
-  // decrease in the confidence of the solution. The former is a very simple
-  // computation, performed by this function. The latter is more
-  // computationally costly. We only need to run that computation for
-  // large-outlierness-factor measurements, so it should be relatively quick.
-  //
-  // Solving the full problem (BOTH inliers, outliers) I minimize E_io =
-  // norm2( x_io(p_io) ). If I knew which measurements are outliers, I can
-  // remove them and minimize E_i = norm2( x_i(p_i) ). In reality I don't know
-  // which measurements are outliers, so I have ..._io, but not ..._i.
-  //
-  // Let p_i and p_io be the state vectors are their respective optima. And
-  // let's assume that the system is locally linear with J = dx/dp. I can
-  // split this into Ji = dxi/dp, Jo = dxo/dp. Then p_i = p_io + dp ->
-  // x_i(p_i) ~ x_i(p_io) + Ji*dp -> Ei = norm2( x_i(p_io) + Ji*dp )
-  // dp is the shift in p: dp = pi-pio
-  //
-  // p_io optimizes E_io ->
-  // dEio/dp = 0 -> Jt x_io(p_io) = Jit xi + Jot xo = 0
-  //     ---> Jit xi = -Jot xo
-  //
-  // We also know that p_i optimizes E_i ->
-  // dEi/dpi = 0 = -> Jit ( x_i(p_io) + Ji dp ) = 0
-  //    ---> Jit xi = -Jit Ji dp
-  //    ---> dp = - inv(Jit Ji) Jit xi
-  //
-  // The outlierness factor is E_io/(Ni+No) - E_i/Ni. If Ni >> No ->
-  // outlierness factor f = (E_io - E_i) / N. I would expect the cost function
-  // to improve when data is removed, so I would expect f > 0, with LARGE f
-  // indicating an outlier.
-  //
-  // f = 1/N (norm2( x_io(p_io) ) - norm2( x_i(p_io) + Ji*dp ) )
-  //   = 1/N (norm2( x_i(p_io) ) + norm2( x_o(p_io) ) - norm2( x_i(p_io) + Ji*dp ) )
-  //   = 1/N (norm2( x_o(p_io) ) - 2*inner( x_i(p_io), Ji*dp ) - norm2( Ji*dp ) )
-  //   = 1/N (xot xo - 2 xit Ji dp - norm2(Ji dp)) =
-  //   = 1/N (xot xo - 2 xit Ji dp - dpt Jit Ji dp =
-  //   = 1/N (xot xo - 2 xit Ji dp + xit Ji dp) =
-  //   = 1/N (xot xo - xit Ji dp )
-  //   = 1/N (xot xo + xit Ji inv(Jit Ji) Jit xi )
-  //   = 1/N (xot xo + xot Jo inv(Jit Ji) Jot xo )
-  //   = 1/N (xot (I + Jo inv(Jit Ji) Jot) xo )
-  //
-  // I already optimized the inlier-and-outlier problem, so I have
-  //
-  //   JtJ = sum(outer( ji, ji ) + outer( jo, jo ))
-  //       = Jit Ji + Jot Jo
-  //
-  // and
-  //
-  //   inv(Jit Ji) = inv(JtJ - Jot Jo)
-  //
-  // Woodbury identity:
-  //
-  //   inv(Jit Ji) = inv(JtJ - Jot Jo) =
-  //               = inv(JtJ) - inv(JtJ) Jot inv(-I + Jo inv(JtJ) Jot) Jo inv(JtJ)
-  //
-  // Let M = inv(JtJ) ->
-  //   inv(Jit Ji) = M - M Jot inv(-I + Jo M Jot) Jo M
-  //
-  // So f = 1/N (xot (I + Jo M Jot - Jo M Jot inv(-I + Jo M Jot) Jo M Jot) xo )
-  //
-  // Let A = Jo M Jot
-  // Let B = inv(A-I) -> AB = BA = I+B
-  //
-  //    f = 1/N (xot (I + A - A inv(-I + A) A) xo )
-  //      = 1/N (xot (I + A - A B A) xo )
-  //      = 1/N (xot (I + A - A - AB) xo )
-  //      = 1/N (xot (I + A - A - I - B) xo )
-  //      = 1/N (xot (- B) xo )
-  //      = 1/N (xot inv(I - A) xo )
-  //
-  // If I'm looking at a single outlier measurement then A is a scalar and
-  //
-  //    f = 1/N (xot inv(I - A) xo )
-  //      = xo^2 /( N * (1 - A) ) =
-  //      = xo^2 /( N * (1 - jt inv(JtJ) j) ) =
-  //
-  // I just solved the nonlinear optimization problem, so I already have
-  // inv(JtJ). And for any one measurement, the outlier factor is
-  //
-  //    x^2 / (1 - jt inv(JtJ) j) / Nmeasurement
-  //
-  // where x is the scalar measurement, j is its vector gradient and JtJ = Jt
-  // * J and J is a matrix of ALL the gradients of all the measurements
-  //
-  // This is the the "self" error difference + the "others" error difference.
-  // If I split this up I get
-  //
-  //   f_others = f_both - x^2/N =
-  //              x^2/Nmeasurement ( 1 / (1 - jt inv(JtJ) j) - 1 ) =
-  //              x^2/Nmeasurement ( (1 - (1 - jt inv(JtJ) j)) / (1 - jt inv(JtJ) j) ) =
-  //              x^2/Nmeasurement ( jt inv(JtJ) j / (1 - jt inv(JtJ) j) ) =
-
   if(featureSize <= 1)
     featureSize = 1;
 
@@ -1623,6 +1783,7 @@ bool dogleg_getOutliernessFactors( // output
     }
 
     fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);
+    fprintf(fp, "Nstate = %d\n", Nstate);
     fprintf(fp, "Nfeatures = %d\n", Nfeatures);
     fprintf(fp, "featureSize = %d\n", featureSize);
 
@@ -1632,6 +1793,7 @@ bool dogleg_getOutliernessFactors( // output
     fprintf(fp,"))\n");
 
     fprintf(fp,
+            "scale = Nmeasurements / (4.*((Nstate+1.) * nps.inner(x%1$d,x%1$d)/(Nmeasurements - Nstate - 1.)))\n"
             "pinvj = np.linalg.pinv(J%1$d)\n"
             "imeas0 = [featureSize*i for i in xrange(Nfeatures)]\n"
             "jslices = [J%1$d[imeas0[i]:(imeas0[i]+featureSize), :] for i in xrange(Nfeatures)]\n"
@@ -1639,19 +1801,20 @@ bool dogleg_getOutliernessFactors( // output
             "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+featureSize)]) for i in xrange(Nfeatures)]\n"
             "factors_ref = np.array([nps.inner(xslices[i],"
             "                                  np.linalg.solve(np.eye(featureSize)-A[i],nps.transpose(xslices[i])).ravel())"
-            "                        for i in xrange(Nfeatures)]) / Nmeasurements\n",
+            "                        for i in xrange(Nfeatures)]) * scale\n"
+            "factor_err = factors_ref-factors_got\n",
             count);
 
-    fprintf(fp, "print 'normdiff: {}'.format(np.linalg.norm(factors_ref-factors_got))\n");
+    fprintf(fp, "print 'RMS discrepancy in the factor (should be 0): {}'.format(np.sqrt(np.mean(factor_err*factor_err)))\n");
 
     if(featureSize <= 1)
     {
       fprintf(fp,
-              "factors_ref1 = x%1$d * x%1$d / (1.0 - nps.inner(J%1$d, nps.transpose(pinvj))) / Nmeasurements\n",
+              "factors_ref1 = x%1$d * x%1$d / (1.0 - nps.inner(J%1$d, nps.transpose(pinvj))) * scale\n",
               count
 
               );
-      fprintf(fp, "print 'normdiff1: {}'.format(np.linalg.norm(factors_ref1-factors_got))\n");
+      fprintf(fp, "print 'normdiff1 (should be 0): {}'.format(np.linalg.norm(factors_ref1-factors_got))\n");
       fprintf(fp, "print 'normrefref1: {}'.format(np.linalg.norm(factors_ref1-factors_ref))\n");
     }
     fflush(fp);
@@ -1669,100 +1832,25 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
                                                     dogleg_operatingPoint_t* point,
                                                     dogleg_solverContext_t* ctx)
 {
-  // This is Dima's derivation. It's similar in spirit to the outlierness factor
-  // derivation in dogleg_getOutliernessFactors()
-  //
-  // I want to test the confidence of returned intrinsics by
-  //
-  // 1. Solving the optimization problem
-  //
-  // 2. Querying the solution in a way we care about to produce a new feature
-  //    group of measurements x = f - ref. We can compute J = dx/dp = df/dp. And
-  //    we presumably know something about ref: like its probability
-  //    distribution for instance. Example: we just calibrated a camera; we want
-  //    to know how confident we are about a projection in a particular spot on
-  //    the imager. I compute a projection in that spot: q = project(v). If
-  //    added to the optimization I'd get x = q - ref where 'ref' would be the
-  //    observed pixel coordinate.
-  //
-  // 3. If this new feature was added to the optimization, I can compute its
-  //    outlierness factor in the same way as before. If we have confidence
-  //    about the solution in a particular spot, then we have consensus, and it
-  //    wouldn't take much for these queries to look like outliers. Conversely,
-  //    if we aren't well-defined, thingss wouldn't look very outliery
-  //
-  // Let p,x,J represent the solution. The new feature we're adding is x* with
-  // jacobian J*. The solution would move by dp to get to the new optimum.
-  //
-  // Original solution is an optimum: Jt x = 0
-  //
-  // The problem including the new point is also at an optimum:
-  //
-  // E* = norm2(x(p+dp)) + norm2(x*(p+dp))
-  //    = norm2(x + J dp) + norm2(x* + J* dp)
-  // dE*/dp = 0 -> 0 = Jt x + JtJ dp + J*t x* + J*tJ*dp =
-  //                 = JtJ dp + J*t x* + J*t J*dp
-  // -> dp = -inv(JtJ + J*tJ*) J*t x*
-  //
-  // Let M = inv(JtJ).
-  // Woodbury identity:
-  // dp = -(M - M J*t inv(I + J* M J*t) J* M ) J*t x*
-  //
-  // Let A = J* M J*t and B = inv(I+A) -> AB = BA = I-B
-  //
-  // dp = -M J*t x* + M J*t B A x*
-  //    = -M J*t x* + M J*t x* - M J*t B x*
-  //    = -M J*t B x*
-  //
-  // The outlierness factor is
-  //
-  // f = (norm2(x + Jdp) + norm2(x* + J* dp))/(N+1) - norm2(x)/N
-  //   ~ 1/N ( norm2(x + Jdp) + norm2(x* + J* dp) - norm2(x) )
-  //   = 1/N ( norm2( Jdp) + norm2(x*) + 2 inner(x*, J* dp) + norm2(J* dp) )
-  //
-  // norm2(Jdp) = dpt JtJ dp. From above:
-  // JtJ dp + J*t x* + J*t J*dp = 0 -> JtJ dp = -J*t x* - J*t J*dp
-  //
-  // So norm2(Jdp) = -dpt (J*t x* + J*t J*dp)
-  // And
-  //
-  // f = 1/N ( -dpt (J*t x* + J*t J*dp) + norm2(x*) + 2 inner(x*, J* dp) + norm2(J* dp) )
-  //   = 1/N ( norm2(x*) + inner(x*, J* dp) )
-  //   = 1/N ( norm2(x*) + inner(x*, J* (-M J*t B x*)) )
-  //   = 1/N ( norm2(x*) + inner(x*, (-A B x*)) )
-  //   = 1/N x*t ( I + -A B) x* =
-  //   = 1/N x*t ( I + -I + B) x* =
-  //   = 1/N x*t B x*
-  //   = 1/N x*t inv(I+A) x*
-  //   = 1/N x*t inv(I + J* M J*t) x*
-  //   = 1/N x*t inv(I + J* inv(JtJ) J*t) x*
-  //
-  // As expected, this is pretty similar to the outlier rejection case
-  //
-  // This is the the "self+others" error difference. What's the "others"
-  // difference?
-  //
-  // f = norm2(x + Jdp)/(N+1) - norm2(x)/N
-  //   ~ 1/N ( norm2(x + Jdp) - norm2(x) )
-  //   = 1/N ( norm2( Jdp)  )
-  //   = 1/N ( dpt JtJ dp )
-  //   = 1/N ( x*t B J* M JtJ M J*t B x* )
-  //   = 1/N ( x*t B J* M J*t B x* )
-  //   = 1/N ( x*t B A B x* )
-  //   = 1/N x*t (B - B^2) x*
-  //
-  //
-  // For the "self+others" factor I need x* and inv(I + J* inv(JtJ) J*t). For a
-  // quadratic form I can compute the expected value E(x*t C x) = trace(C
-  // Var(x*)). I'm going to assume that x* are all independent and identical, so
-  // Var(x*) is proportional to the identity, and E(x*t C x) = trace(C) vx*. I
-  // thus let the caller deal with the variance, and I just return
-  //
-  // trace(inv(I + J* inv(JtJ) J*t))
+  /*
+    See the big comment above for a description
 
-  //   A = J* inv(JtJ) J*t ->
-  //   B = inv(I + A)      ->
-  //   tr(B) = (2+a00+a11) / ((1+a00)*(1+a11) - a01^2)
+    The outlierness I'm using here has the form x*t C x where x =
+    project(q)-xref. xref is a random variable of a potential query point with
+    mean at project(q) (so that x has mean 0). I conceivably have a distribution
+    for xref and I know its variance. For a quadratic form I can compute the
+    expected value E(x*t C x) = trace(C Var(x*)). I'm going to assume that x*
+    are all independent and identical, so Var(x*) is proportional to the
+    identity, and E(x*t C x) = trace(C) vx*. I thus let the caller deal with the
+    variance, and I just return
+
+    k*trace(inv(I + J* inv(JtJ) J*t))
+
+    A = J* inv(JtJ) J*t ->
+    B = inv(I + A)      ->
+    tr(B) = (2+a00+a11) / ((1+a00)*(1+a11) - a01^2)
+  */
+
 
   // This is Jt because cholmod thinks in terms of col-first instead of
   // row-first
@@ -1833,17 +1921,94 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
 
   __attribute__((unused))
   double B01 = -invB01 * det_invB_recip;
+  double traceB = B00 + B11;
 
-  // The "self+others" outlierness factor needs to return tr(B). The "others"
-  // outlierness factor needs to return is tr(B-B^2)
 
-  // tr( [a b; b c]^2 ) = a^2 + 2b^2 + c^2
+#if 0
+  static int count = -1;
+  count++;
+  if(count <= 5)
+  {
+    int  Nstate        = ctx->Nstate;
+    int  Nmeasurements = ctx->Nmeasurements;
 
-  // Empirically, it looks like the "self+others" outlierness factor contains
-  // about as much information as the "others" one, so I return the
-  // "self+others" factor
-  return B00 + B11;
-  // return B00 + B11 - (B00*B00 + 2*B01*B01 + B11*B11);
+
+
+    static FILE* fp = NULL;
+    if(fp == NULL)
+      fp = fopen("/tmp/check-query-outlierness.py", "w");
+
+    fprintf(fp, "# WARNING: all J here are unscaled with SCALE_....\n");
+
+    if(count == 0)
+    {
+      fprintf(fp,
+              "import numpy as np\n"
+              "import numpysane as nps\n"
+              "np.set_printoptions(linewidth=100000)\n"
+              "\n");
+    }
+
+    fprintf(fp, "x%d = np.array((", count);
+    for(int j=0;j<Nmeasurements;j++)
+      fprintf(fp, "%.20g,", point->x[j]);
+    fprintf(fp,"))\n");
+
+    if( ctx->is_sparse )
+    {
+      fprintf(fp, "J%d = np.zeros((%d,%d))\n", count, Nmeasurements, Nstate);
+      for(int imeas=0;imeas<Nmeasurements;imeas++)
+      {
+        for(int j = P(point->Jt, imeas);
+            j     < (int)P(point->Jt, imeas+1);
+            j++)
+        {
+          int irow = I(point->Jt, j);
+          fprintf(fp, "J%d[%d,%d] = %g\n", count,
+                  imeas, irow, X(point->Jt, j));
+        }
+      }
+    }
+    else
+    {
+      fprintf(fp, "J%d = np.array((\n", count);
+      for(int j=0;j<Nmeasurements;j++)
+      {
+        fprintf(fp, "(");
+        for(int i=0;i<Nstate;i++)
+          fprintf(fp, "%.20g,", point->J_dense[j*Nstate+i]);
+        fprintf(fp, "),\n");
+      }
+      fprintf(fp,"))\n");
+    }
+
+    fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);
+    fprintf(fp, "Nstate = %d\n", Nstate);
+    fprintf(fp, "featureSize = %d\n", featureSize);
+    fprintf(fp, "traceB_got = %.20g\n", traceB);
+
+    fprintf(fp, "Jq = np.zeros((featureSize, Nstate), dtype=float)\n");
+    for(int i=0; i<NstateActive; i++)
+      for(int j=0; j<featureSize; j++)
+        fprintf(fp, "Jq[%d,%d] = %.20g\n", j, i + istateActive, JqueryFeature[j*NstateActive + i]);
+
+    fprintf(fp,
+            "A = nps.matmult(Jq, np.linalg.solve( nps.matmult(nps.transpose(J%1$d),J%1$d), nps.transpose(Jq)))\n"
+            "B = np.linalg.inv( A + np.eye(featureSize) )\n",
+            count);
+
+    fprintf(fp, "print 'trace got,ref,rr: {}, {}, {}'.format(traceB_got,np.trace(B),traceB_got-np.trace(B))\n");
+    fflush(fp);
+  }
+#endif
+
+
+  // see big comment above
+  double scale =
+    (double)ctx->Nmeasurements /
+    (4.*((double)(ctx->Nstate+1) * point->norm2_x/(double)(ctx->Nmeasurements - ctx->Nstate - 1)));
+
+  return scale * traceB;
 }
 
 
@@ -1990,26 +2155,6 @@ bool dogleg_markOutliers(// output, input
     if(featureSize <= 1)
       featureSize = 1;
 
-    // What is an outlier? Suppose I just found an optimum. I define an
-    // outlier as an observation that does two things to the problem if I
-    // remove that observation:
-    //
-    // 1. The cost function would improve significantly. Things would
-    //    clearly improve because the cost function contribution of the
-    //    removed point itself would get removed, but ALSO because the
-    //    parameters could fit to the remaining data better without that
-    //    extra observation.
-    //
-    // 2. The confidence of the solution does not significantly decrease.
-    //    One could imagine a set of data that define the problem poorly,
-    //    and produce a low cost function value for some (overfit) set of
-    //    parameters. And one can imagine an extra point being added that
-    //    defines the problem and increases the confidence of the solution.
-    //    This extra point would suppress the overfitting, so this extra
-    //    point would increase the cost function value. Condition 1 above
-    //    would make this extra point look like an outlier, and this
-    //    condition is meant to detect this case and to classify this point
-    //    as NOT an outlier
     bool markedAny = false;
 
     double* factors = malloc(Nfeatures * sizeof(double));
@@ -2102,27 +2247,18 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
     dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, point, ctx);
 
     SAY("## Outlier statistics");
-    SAY("# i_feature outlier_factor outlier_factor_self outlier_factor_others confidence_drop_relative_if_removed");
+    SAY("# i_feature outlier_factor confidence_drop_relative_if_removed");
 
     double confidence_full = getConfidence(-1);
-    int  Nmeasurements = ctx->Nmeasurements;
 
     for(int i=0; i<Nfeatures; i++)
     {
       double confidence = getConfidence(i);
       double rot_confidence_drop_relative = 1.0 - confidence / confidence_full;
 
-      double self = 0.0;
-      for(int j=0; j<featureSize; j++)
-      {
-        double x = point->x[i*featureSize + j];
-        self += x*x;
-      }
-      self /= (double)Nmeasurements;
-
-      SAY("%5d %9.3g %9.3g %9.3g %9.3g",
+      SAY("%5d %9.3g %9.3g",
           i,
-          factors[i], self, factors[i] - self,
+          factors[i],
           rot_confidence_drop_relative);
     }
 
