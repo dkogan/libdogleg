@@ -1225,7 +1225,7 @@ If we move by dp, and take away the outlier's own cost, we get
   E1 = norm2(x + J dp) - norm2( x* + J* dp )
 
 where x* and J* refer to the outlier measurements. Thus "Dima's self+others
-factor" is norm2(x) - (norm2(x + J dp) - norm2( x* + J* dp )) =
+factor" is norm2(x) - (norm2(x + J dp) - norm2( x* + J* dp ))
 
 We can choose to look at ONLY the effect on the other variables. That would
 produce "Dima's others factor" = norm2(x)-norm2(x*) - (norm2(x + J dp) -
@@ -1869,8 +1869,8 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
     for xref and I know its variance. For a quadratic form I can compute the
     expected value E(x*t C x) = trace(C Var(x*)). I'm going to assume that x*
     are all independent and identical, so Var(x*) is proportional to the
-    identity, and E(x*t C x) = trace(C) vx*. I thus let the caller deal with the
-    variance, and I just return
+    identity, and E(x*t C x) = trace(C) Var(x*). I thus let the caller deal with
+    the variance, and I just return
 
     k*trace(inv(I + J* inv(JtJ) J*t))
 
