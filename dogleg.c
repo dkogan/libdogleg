@@ -1527,6 +1527,14 @@ static void accum_outlierness_factor(// output
   *factor *= k;
 }
 
+static double getOutliernessScale(int Nmeasurements, int Nstate, int NoutlierFeatures, int featureSize, double norm2_x)
+{
+  // see big comment above
+  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
+  return (double)(Nmeasurements_nonoutliers) /
+    (4.*((double)(Nstate+1) * norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
+}
+
 static bool getOutliernessFactors_dense( // output
                                         double* factors, // Nfeatures factors
 
@@ -1564,11 +1572,7 @@ static bool getOutliernessFactors_dense( // output
     goto done;
   }
 
-  // see big comment above
-  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
-  double scale =
-    (double)(Nmeasurements_nonoutliers) /
-    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
+  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -1662,11 +1666,10 @@ static bool getOutliernessFactors_sparse( // output
     goto done;
   }
 
-  // see big comment above
-  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
-  double scale =
-    (double)(Nmeasurements_nonoutliers) /
-    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
+  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
+
+  fprintf(stderr, "%s: norm2x=%f threshold=%f, Nstate=%d Nmeasurements=%d NoutlierFeatures=%d featureSize=%d\n",
+          __func__, point->norm2_x, scale, Nstate, Nmeasurements, NoutlierFeatures, featureSize);
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -2036,10 +2039,7 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
   int Nmeasurements = ctx->Nmeasurements;
   int Nstate        = ctx->Nstate;
 
-  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
-  double scale =
-    (double)(Nmeasurements_nonoutliers) /
-    (4.*((double)(Nstate+1) * point->norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
+  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
   // Dima's self+others
   return scale * traceB;
