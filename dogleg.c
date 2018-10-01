@@ -2159,14 +2159,14 @@ bool dogleg_markOutliers(// output, input
             // outlier. Throw it away.
             markedOutliers[i].marked = true;
             markedAny                = true;
-            SAY_IF_VERBOSE("Excluding feature %d produces a confidence: %g. relative loss: %g... YES an outlier; confidence drops little",
-                           i, confidence_excluded, confidence_drop_relative);
+            SAY_IF_VERBOSE("Feature %d has outlierness factor %f. Culling produces a confidence: %g. relative loss: %g... YES an outlier; confidence drops little",
+                           i, factors[i], confidence_excluded, confidence_drop_relative);
             (*Noutliers)++;
         }
         else
         {
-            SAY_IF_VERBOSE("Excluding feature %d produces a confidence: %g. relative loss: %g... NOT an outlier: confidence drops too much",
-                           i, confidence_excluded, confidence_drop_relative);
+            SAY_IF_VERBOSE("Feature %d has outlierness factor %f. Culling produces a confidence: %g. relative loss: %g... NOT an outlier: confidence drops too much",
+                           i, factors[i], confidence_excluded, confidence_drop_relative);
         }
     }
 
