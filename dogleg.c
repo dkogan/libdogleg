@@ -1815,7 +1815,7 @@ bool dogleg_getOutliernessFactors( // output
             j++)
         {
           int irow = I(point->Jt, j);
-          fprintf(fp, "J%d[%d,%d] = %g\n", count,
+          fprintf(fp, "J%d[%d,%d] = %.20g\n", count,
                   imeas, irow, X(point->Jt, j));
         }
       }
@@ -1839,6 +1839,8 @@ bool dogleg_getOutliernessFactors( // output
     fprintf(fp, "featureSize = %d\n", featureSize);
     fprintf(fp, "NoutlierFeatures = %d\n", NoutlierFeatures);
 
+    fprintf(fp, "scale_got = %.20f\n", *scale);
+
     fprintf(fp, "factors_got = np.array((");
     for(int j=0;j<Nfeatures;j++)
       fprintf(fp, "%.20g,", factors[j]);
@@ -1852,13 +1854,29 @@ bool dogleg_getOutliernessFactors( // output
             "jslices = [J%1$d[imeas0[i]:(imeas0[i]+featureSize), :] for i in xrange(Nfeatures)]\n"
             "xslices = [x%1$d[imeas0[i]:(imeas0[i]+featureSize)   ] for i in xrange(Nfeatures)]\n"
             "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+featureSize)]) for i in xrange(Nfeatures)]\n"
-            "factors_ref = np.array([nps.inner(xslices[i],"
-            "                                  np.linalg.solve(np.eye(featureSize)-A[i],nps.transpose(xslices[i])).ravel())"
-            "                        for i in xrange(Nfeatures)]) * scale\n"
-            "factor_err = factors_ref-factors_got\n",
+            "B       = [np.linalg.inv(A[i] - np.eye(featureSize)) for i in xrange(Nfeatures)]\n"
+
+
+            "dp = -nps.matmult(pinvj[:,imeas:imeas+2], B[ifeat], nps.transpose(xslices[ifeat])).ravel()\n"
+            "Jdp = nps.matmult(J0, nps.transpose(dp)).ravel()\n"
+            "normJdp = nps.inner(Jdp,Jdp)\n"
+
+            "factors_ref = np.array([nps.matmult(xslices[i],"
+
+
+
+            "                                    B[i] + nps.matmult(B[i],B[i])," // Cook's self+others
+            //"                                    -B[i]," // Dima's self+others
+
+            "                                    nps.transpose(xslices[i])).ravel()"
+            "                        for i in xrange(Nfeatures)]).ravel() * scale\n"
+
+            "factor_err = factors_ref-factors_got\n"
+            "scale_err = scale-scale_got\n",
             count);
 
     fprintf(fp, "print 'RMS discrepancy in the factor (should be 0): {}'.format(np.sqrt(np.mean(factor_err*factor_err)))\n");
+    fprintf(fp, "print 'Scale error: {}'.format(scale_err)\n");
 
     if(featureSize <= 1)
     {
