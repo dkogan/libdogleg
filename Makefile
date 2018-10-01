@@ -29,7 +29,7 @@ endif
 
 # Add my optimization flags if none already exist. These could exist if debian
 # packages are built.
-OPTFLAGS := $(if $(filter -O%, $(CFLAGS)),,-O3 -ffast-math -mtune=core2)
+OPTFLAGS := $(if $(filter -O%, $(CFLAGS)),,-O3 -ffast-math -mtune=core2) -fno-omit-frame-pointer
 
 FLAGS += -ggdb  -Wall -Wextra -MMD $(OPTFLAGS) -I/usr/include/suitesparse
 CFLAGS += $(FLAGS) --std=gnu99
