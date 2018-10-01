@@ -1688,9 +1688,6 @@ static bool getOutliernessFactors_sparse( // output
   getOutliernessScale(scale,
                       Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
-  fprintf(stderr, "%s: norm2x=%f threshold=%f, Nstate=%d Nmeasurements=%d NoutlierFeatures=%d featureSize=%d\n",
-          __func__, point->norm2_x, *scale, Nstate, Nmeasurements, NoutlierFeatures, featureSize);
-
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
   int i_measurement = 0;
