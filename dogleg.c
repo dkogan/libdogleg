@@ -1527,16 +1527,31 @@ static void accum_outlierness_factor(// output
   *factor *= k;
 }
 
-static double getOutliernessScale(int Nmeasurements, int Nstate, int NoutlierFeatures, int featureSize, double norm2_x)
+static void getOutliernessScale(// out
+                                double* scale, // if *scale > 0, I just keep what I have
+
+                                // in
+                                int Nmeasurements, int Nstate,
+                                int NoutlierFeatures, int featureSize,
+                                double norm2_x)
 {
-  // see big comment above
-  int Nmeasurements_nonoutliers = Nmeasurements - NoutlierFeatures*featureSize;
-  return (double)(Nmeasurements_nonoutliers) /
+  // if *scale > 0, I just keep what I have
+  if(*scale > 0.0)
+    return;
+
+  int    Nmeasurements_outliers    = NoutlierFeatures*featureSize;
+  int    Nmeasurements_nonoutliers = Nmeasurements - Nmeasurements_outliers;
+
+  *scale =
+    (double)(Nmeasurements_nonoutliers) /
     (4.*((double)(Nstate+1) * norm2_x/(double)(Nmeasurements_nonoutliers - Nstate - 1)));
 }
 
 static bool getOutliernessFactors_dense( // output
                                         double* factors, // Nfeatures factors
+
+                                        // output, input
+                                        double* scale, // if <0 then I recompute
 
                                         // inputs
                                         // if outliers are grouped into features,
@@ -1572,7 +1587,8 @@ static bool getOutliernessFactors_dense( // output
     goto done;
   }
 
-  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
+  getOutliernessScale(scale,
+                      Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -1594,7 +1610,7 @@ static bool getOutliernessFactors_dense( // output
 
     // from the derivation in a big comment in above I have
     //
-    //   f = 1/N (xot inv(I - A) xo )
+    //   f = scale (xot (...) xo )
     //
     // where A = Jo inv(JtJ) Jot
     //
@@ -1613,7 +1629,7 @@ static bool getOutliernessFactors_dense( // output
       }
     accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, featureSize, scale);
+                             A, featureSize, *scale);
   }
 
   result = true;
@@ -1625,6 +1641,9 @@ static bool getOutliernessFactors_dense( // output
 
 static bool getOutliernessFactors_sparse( // output
                                          double* factors, // Nfeatures factors
+
+                                         // output, input
+                                         double* scale, // if <0 then I recompute
 
                                          // inputs
                                          // if outliers are grouped into features,
@@ -1666,10 +1685,11 @@ static bool getOutliernessFactors_sparse( // output
     goto done;
   }
 
-  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
+  getOutliernessScale(scale,
+                      Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
   fprintf(stderr, "%s: norm2x=%f threshold=%f, Nstate=%d Nmeasurements=%d NoutlierFeatures=%d featureSize=%d\n",
-          __func__, point->norm2_x, scale, Nstate, Nmeasurements, NoutlierFeatures, featureSize);
+          __func__, point->norm2_x, *scale, Nstate, Nmeasurements, NoutlierFeatures, featureSize);
 
   int i_measurement_valid_chunk_start = -1;
   int i_measurement_valid_chunk_last  = -1;
@@ -1694,7 +1714,7 @@ static bool getOutliernessFactors_sparse( // output
 
     // from the derivation in a big comment in above I have
     //
-    //   f = 1/N (xot inv(I - A) xo )
+    //   f = scale (xot (...) xo )
     //
     // where A = Jo inv(JtJ) Jot
     //
@@ -1718,7 +1738,7 @@ static bool getOutliernessFactors_sparse( // output
       }
     accum_outlierness_factor(&factors[i_feature],
                              &point->x[i_measurement],
-                             A, featureSize, scale);
+                             A, featureSize, *scale);
   }
 
   result = true;
@@ -1730,6 +1750,9 @@ static bool getOutliernessFactors_sparse( // output
 
 bool dogleg_getOutliernessFactors( // output
                                   double* factors, // Nfeatures factors
+
+                                  // output, input
+                                  double* scale, // if <0 then I recompute
 
                                   // inputs
                                   // if outliers are grouped into features, the
@@ -1746,9 +1769,9 @@ bool dogleg_getOutliernessFactors( // output
   dogleg_computeJtJfactorization( point, ctx );
   bool result;
   if(ctx->is_sparse)
-    result = getOutliernessFactors_sparse(factors, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
+    result = getOutliernessFactors_sparse(factors, scale, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
   else
-    result = getOutliernessFactors_dense(factors, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
+    result = getOutliernessFactors_dense(factors, scale, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
 
 #if 0
   if( result )
@@ -2039,7 +2062,9 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
   int Nmeasurements = ctx->Nmeasurements;
   int Nstate        = ctx->Nstate;
 
-  double scale = getOutliernessScale(Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
+  double scale = -1.0;
+  getOutliernessScale(&scale,
+                      Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
   // Dima's self+others
   return scale * traceB;
@@ -2057,6 +2082,8 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
 #define OUTLIER_CONFIDENCE_DROP_THRESHOLD 0.05
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
+                         double* scale, // if <0 then I recompute
+
                          // output, input
                          int* Noutliers,
 
@@ -2083,7 +2110,8 @@ bool dogleg_markOutliers(// output, input
         goto done;
     }
 
-    if(!dogleg_getOutliernessFactors(factors, featureSize, Nfeatures,
+    if(!dogleg_getOutliernessFactors(factors, scale,
+                                     featureSize, Nfeatures,
                                      *Noutliers,
                                      point, ctx))
         goto done;
@@ -2142,6 +2170,7 @@ bool dogleg_markOutliers(// output, input
 // confidence change if the feature were to be removed. Normally we do this
 // ONLY for potential outliers
 void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
+                            double* scale, // if <0 then I recompute
 
                             // if outliers are grouped into features, the
                             // feature size is set here
@@ -2162,7 +2191,8 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
         goto done;
     }
 
-    dogleg_getOutliernessFactors(factors, featureSize, Nfeatures, Noutliers, point, ctx);
+    dogleg_getOutliernessFactors(factors, scale,
+                                 featureSize, Nfeatures, Noutliers, point, ctx);
 
     SAY("## Outlier statistics");
     SAY("# i_feature outlier_factor confidence_drop_relative_if_removed");

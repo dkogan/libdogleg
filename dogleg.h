@@ -180,6 +180,9 @@ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 bool dogleg_getOutliernessFactors( // output
                                   double* factors, // Nfeatures factors
 
+                                  // output, input
+                                  double* scale, // if <0 then I recompute
+
                                   // inputs
                                   // if outliers are grouped into features, the feature size is
                                   // stated here
@@ -199,6 +202,8 @@ struct dogleg_outliers_t
 };
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
+                         double* scale, // if <0 then I recompute
+
                          // output, input
                          int* Noutliers, // number of outliers before and after this call
 
@@ -214,6 +219,7 @@ bool dogleg_markOutliers(// output, input
                          dogleg_solverContext_t* ctx);
 
 void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
+                            double* scale, // if <0 then I recompute
 
                             // if outliers are grouped into features, the feature size
                             // is stated here
