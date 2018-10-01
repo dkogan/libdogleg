@@ -1853,11 +1853,6 @@ bool dogleg_getOutliernessFactors( // output
             "A       = [nps.matmult(jslices[i],pinvj[:,imeas0[i]:(imeas0[i]+featureSize)]) for i in xrange(Nfeatures)]\n"
             "B       = [np.linalg.inv(A[i] - np.eye(featureSize)) for i in xrange(Nfeatures)]\n"
 
-
-            "dp = -nps.matmult(pinvj[:,imeas:imeas+2], B[ifeat], nps.transpose(xslices[ifeat])).ravel()\n"
-            "Jdp = nps.matmult(J0, nps.transpose(dp)).ravel()\n"
-            "normJdp = nps.inner(Jdp,Jdp)\n"
-
             "factors_ref = np.array([nps.matmult(xslices[i],"
 
 
