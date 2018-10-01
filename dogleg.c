@@ -1508,14 +1508,15 @@ static void accum_outlierness_factor(// output
       __attribute__((unused)) double v2 = x[0]*B01_det + x[1]*B11_det;
       __attribute__((unused)) double xBBx = (v1*v1 + v2*v2) / (det*det);
 
-      // mine self+others
-      *factor = -xBx;
+      // // mine self+others
+      // *factor = -xBx;
 
       // // mine others / cook others
       // *factor = -(x[0]*x[0] + x[1]*x[1]) - xBx;
 
-      // // cook's self+others
-      // *factor = xBx + xBBx;
+      // cook's self+others
+      *factor = xBx + xBBx;
+
     }
   }
   else
@@ -2076,11 +2077,11 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
   getOutliernessScale(&scale,
                       Nmeasurements, Nstate, NoutlierFeatures, featureSize, point->norm2_x);
 
-  // Dima's self+others
-  return scale * traceB;
+  // // Dima's self+others
+  // return scale * traceB;
 
-  // // Cook's self+others
-  // return scale * (2.0 - traceB);
+  // Cook's self+others
+  return scale * (2.0 - traceB);
 
   // // Dima's others/Cook's others
   // // This one is non-monotonic in outlierness-test
