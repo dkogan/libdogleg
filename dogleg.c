@@ -25,7 +25,7 @@
 #define SAY_IF_VERBOSE(fmt,...) do { if( DOGLEG_DEBUG ) SAY(fmt, ##__VA_ARGS__); } while(0)
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
-#define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x "is not true"); exit(1); } } while(0)
+#define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x " is not true"); exit(1); } } while(0)
 
 // used to consolidate the casts
 #define P(A, index) ((unsigned int*)((A)->p))[index]
