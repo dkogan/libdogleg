@@ -1525,6 +1525,11 @@ static void accum_outlierness_factor(// output
     ASSERT(0);
   }
 
+
+#warning This is a hack. The threshold should be 1.0, and the scaling should make sure that is the case. I am leaving it for now
+  k /= 8.;
+
+
   *factor *= k;
 }
 
@@ -2146,8 +2151,7 @@ bool dogleg_markOutliers(// output, input
           continue;
         }
 
-#warning This is a hack. The threshold should be 1.0, and the scaling should make sure that is the case. I am leaving it for now
-        if(factors[i] < 8.0)
+        if(factors[i] < 1.0)
             continue;
 
         // Looking at potential new outlier
