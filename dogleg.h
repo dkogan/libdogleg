@@ -198,7 +198,7 @@ bool dogleg_getOutliernessFactors( // output
 // This stuff is experimental, and subject to change.
 struct dogleg_outliers_t
 {
-    char marked : 1;
+    unsigned char marked : 1;
 };
 bool dogleg_markOutliers(// output, input
                          struct dogleg_outliers_t* markedOutliers,
