@@ -398,11 +398,25 @@ To set the maximum number of solver iterations, call
 
 =head3 dogleg_setDebug
 
-To turn on debug output, call
+To turn on diagnostic output, call
 
  void dogleg_setDebug(int debug);
 
-with a non-zero value for C<debug>. By default, debug output is disabled.
+with a non-zero value for C<debug>. Two separate diagnostic streams are
+available: a verbose human-oriented stream, and a
+L<vnlog|http://github.com/dkogan/vnlog>.
+
+By default, diagnostic output is disabled. The C<debug> argument is a bit-mapped
+integer:
+
+ if(debug == 0                 ): no diagnostic output
+ if(debug &  DOGLEG_DEBUG_VNLOG): output vnlog diagnostics to stdout
+ if(debug & ~DOGLEG_DEBUG_VNLOG): output human-oriented diagnostics to stderr
+
+C<DOGLEG_DEBUG_VNLOG> has a very high value, so if human diagnostics are
+desired, the recommended call is:
+
+ dogleg_setDebug(1);
 
 =head3 dogleg_setInitialTrustregion
 

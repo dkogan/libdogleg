@@ -142,7 +142,13 @@ void dogleg_setMaxIterations(int n);
 void dogleg_setTrustregionUpdateParameters(double downFactor, double downThreshold,
                                            double upFactor,   double upThreshold);
 
-// lots of solver-related debug output when on
+// The argument is a bit-mapped integer. Should be a bit-field structure or
+// enum, but for API backwards-compatibility, I keep this an integer.
+//
+// if(debug == 0                 ): no diagnostic output
+// if(debug &  DOGLEG_DEBUG_VNLOG): output vnlog diagnostics to stdout
+// if(debug & ~DOGLEG_DEBUG_VNLOG): output human-oriented diagnostics to stderr
+#define DOGLEG_DEBUG_VNLOG   (1 << 30)
 void dogleg_setDebug(int debug);
 
 
