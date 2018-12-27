@@ -213,11 +213,19 @@ static void vec_copy_scaled(double* dest,
   for(int i=0; i<n; i++)
     dest[i] = scale * v[i];
 }
+__attribute__((unused))
 static void vec_add(double* dest,
                     const double* v0, const double* v1, int n)
 {
   for(int i=0; i<n; i++)
     dest[i] = v0[i] + v1[i];
+}
+__attribute__((unused))
+static void vec_accum(double* dest,
+                      const double* v, int n)
+{
+  for(int i=0; i<n; i++)
+    dest[i] += v[i];
 }
 static void vec_negate(double* v, int n)
 {
