@@ -127,8 +127,6 @@ static void optimizerCallback(const double*   p,
   }
   Jrowptr[Nmeasurements] = iJacobian;
 
-
-  fprintf(stderr, "Callback finished. 2-norm is %f\n", norm2_x);
 #undef STORE_JACOBIAN
 }
 
@@ -168,33 +166,94 @@ static void optimizerCallback_dense(const double*   p,
     STORE_JACOBIAN( 5, 1.0  );
   }
 
-
-  fprintf(stderr, "Callback finished. 2-norm is %f\n", norm2_x);
 #undef STORE_JACOBIAN
 }
 
 
 int main(int argc, char* argv[] )
 {
-  int is_sparse;
+  const char* usage = "Usage: %s [--diag-vnlog] [--diag-human] sparse|dense [test-gradients]\n";
 
-  if( argc >= 2 && 0 == strcmp(argv[1], "dense") )
+  int is_sparse;
+  int test_gradients = 0;
+  int debug          = 0;
+
   {
-    fprintf(stderr, "Using DENSE math\n");
-    is_sparse = 0;
+    // argument parsing
+    int iarg = 1;
+    for(int i=0; i<2; i++)
+    {
+      if(iarg >= argc)
+      {
+        fprintf(stderr, usage, argv[0]);
+        return 1;
+      }
+      if(0 == strcmp("--diag-vnlog", argv[iarg]))
+      {
+        debug |= DOGLEG_DEBUG_VNLOG;
+        iarg++;
+        continue;
+      }
+      if(0 == strcmp("--diag-human", argv[iarg]))
+      {
+        debug |= 1;
+        iarg++;
+        continue;
+      }
+      break;
+    }
+
+    if(iarg >= argc)
+    {
+      fprintf(stderr, usage, argv[0]);
+      return 1;
+    }
+    if( 0 == strcmp(argv[iarg], "dense") )
+    {
+      fprintf(stderr, "Using DENSE math\n");
+      is_sparse = 0;
+    }
+    else if( 0 == strcmp(argv[iarg], "sparse") )
+    {
+      fprintf(stderr, "Using SPARSE math\n");
+      is_sparse = 1;
+    }
+    else
+    {
+      fprintf(stderr, usage, argv[0]);
+      return 1;
+    }
+
+    iarg++;
+    if(iarg == argc-1)
+    {
+      if( 0 != strcmp("test-gradients", argv[iarg]))
+      {
+        fprintf(stderr, usage, argv[0]);
+        return 1;
+      }
+      fprintf(stderr, "Testing the gradients only\n");
+      test_gradients = 1;
+    }
+    else if(iarg == argc)
+    {
+      // not testing gradients. We're good
+    }
+    else
+    {
+      fprintf(stderr, usage, argv[0]);
+      return 1;
+    }
   }
-  else
-  {
-    fprintf(stderr, "Using SPARSE math. Run with '%s dense' to use dense math.\n", argv[0]);
-    is_sparse = 1;
-  }
+
+
 
   srandom( 0 ); // I want determinism here
 
   generateSimulationGrid();
   simulate();
 
-  dogleg_setDebug(1); // request debugging output from the solver
+  dogleg_setDebug(debug);
 
 
   double p[Nstate];
@@ -218,15 +277,18 @@ int main(int argc, char* argv[] )
   // sure that the reported and observed gradients match (the relative error is
   // low)
   fprintf(stderr, "have %d variables\n", Nstate);
-  for(int i=0; i<Nstate; i++)
+  if( test_gradients )
   {
-    fprintf(stderr, "checking gradients for variable %d\n", i);
-    if( is_sparse )
-      dogleg_testGradient(i, p, Nstate, Nmeasurements, Jnnz, &optimizerCallback, NULL);
-    else
-      dogleg_testGradient_dense(i, p, Nstate, Nmeasurements, &optimizerCallback_dense, NULL);
+    for(int i=0; i<Nstate; i++)
+    {
+      fprintf(stderr, "checking gradients for variable %d\n", i);
+      if( is_sparse )
+        dogleg_testGradient(i, p, Nstate, Nmeasurements, Jnnz, &optimizerCallback, NULL);
+      else
+        dogleg_testGradient_dense(i, p, Nstate, Nmeasurements, &optimizerCallback_dense, NULL);
+    }
+    return 0;
   }
-
 
   fprintf(stderr, "SOLVING:\n");
 
