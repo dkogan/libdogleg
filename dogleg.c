@@ -57,6 +57,8 @@ static int DOGLEG_DEBUG   = 0;
 typedef enum { VNLOG_DEBUG_STEP_TYPE_LIST(VNLOG_DEBUG_STEP_TYPE_NAME_COMMA)
                STEPTYPE_UNINITIALIZED } vnlog_debug_step_type_t;
 #define VNLOG_DEBUG_FIELDS(_)                                      \
+  _(double,                  norm2x_before,         INFINITY)      \
+  _(double,                  norm2x_after,          INFINITY)      \
   _(double,                  step_len_cauchy,       INFINITY)      \
   _(double,                  step_len_gauss_newton, INFINITY)      \
   _(double,                  step_len_interpolated, INFINITY)      \
@@ -761,7 +763,10 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
   if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  {
     vnlog_debug_data.trustregion_before = trustregion;
+    vnlog_debug_data.norm2x_before      = pointFrom->norm2_x;
+  }
 
   double update_array[ctx->Nstate];
   double* update;
@@ -923,6 +928,8 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
 
       int afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
       SAY_IF_VERBOSE( "Evaluated operating point with norm2_x %.6g", ctx->afterStep->norm2_x);
+      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+        vnlog_debug_data.norm2x_after = ctx->afterStep->norm2_x;
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
