@@ -392,8 +392,7 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
   vec_copy_scaled(point->updateCauchy,
                   point->Jt_x, k, ctx->Nstate);
 
-  if( DOGLEG_DEBUG )
-    SAY( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
+  SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
 }
 
 // LAPACK prototypes for a packed cholesky factorization and a linear solve
@@ -440,9 +439,8 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       else                    ctx->lambda *= 10.0;
       ASSERT( isfinite(ctx->lambda) );
 
-      if( DOGLEG_DEBUG )
-        SAY( "singular JtJ. Have rank/full rank: %zd/%d. Adding %g I from now on",
-             ctx->factorization->minor, ctx->Nstate, ctx->lambda);
+      SAY_IF_VERBOSE( "singular JtJ. Have rank/full rank: %zd/%d. Adding %g I from now on",
+                      ctx->factorization->minor, ctx->Nstate, ctx->lambda);
     }
   }
   else
@@ -505,8 +503,7 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
       else                    ctx->lambda *= 10.0;
 
-      if( DOGLEG_DEBUG )
-        SAY( "singular JtJ. Adding %g I from now on", ctx->lambda);
+      SAY_IF_VERBOSE( "singular JtJ. Adding %g I from now on", ctx->lambda);
     }
   }
 }
@@ -559,8 +556,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
   }
 
 
-  if( DOGLEG_DEBUG )
-    SAY( "gn step size %.6g", sqrt(point->updateGN_lensq));
+  SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->updateGN_lensq));
 
   point->updateGN_valid = 1;
 }
@@ -611,11 +607,9 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   for(int i=0; i<ctx->Nstate; i++)
     update_dogleg[i] = a[i] + k*(b[i] - a[i]);
 
-  if( DOGLEG_DEBUG )
-  {
-    double updateNorm = norm2(update_dogleg, ctx->Nstate);
-    SAY( "k_cauchy_to_gn %.6g, norm %.6g", k, sqrt(updateNorm));
-  }
+  SAY_IF_VERBOSE( "k_cauchy_to_gn %.6g, norm %.6g",
+                  k,
+                  sqrt(norm2(update_dogleg, ctx->Nstate)));
 }
 
 // takes in point->p, and computes all the quantities derived from it, storing
@@ -653,8 +647,7 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
   for(int i=0; i<ctx->Nstate; i++)
     if(fabs(point->Jt_x[i]) > JT_X_THRESHOLD)
       return 0;
-  if( DOGLEG_DEBUG )
-    SAY( "Jt_x all below the threshold. Done iterating!");
+  SAY_IF_VERBOSE( "Jt_x all below the threshold. Done iterating!");
 
   return 1;
 }
@@ -681,8 +674,7 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
                            double trustregion, dogleg_solverContext_t* ctx)
 {
-  if( DOGLEG_DEBUG )
-    SAY( "taking step with trustregion %.6g", trustregion);
+  SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
 
   double update_array[ctx->Nstate];
   double* update;
@@ -692,8 +684,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
 
   if(pointFrom->updateCauchy_lensq >= trustregion*trustregion)
   {
-    if( DOGLEG_DEBUG )
-      SAY( "taking cauchy step");
+    SAY_IF_VERBOSE( "taking cauchy step");
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
@@ -715,8 +706,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
     computeGaussNewtonUpdate(pointFrom, ctx);
     if(pointFrom->updateGN_lensq <= trustregion*trustregion)
     {
-      if( DOGLEG_DEBUG )
-        SAY( "taking GN step");
+      SAY_IF_VERBOSE( "taking GN step");
 
       // full Gauss-Newton step lies within my trust region. Take the full step
       update = ctx->is_sparse ? pointFrom->updateGN_cholmoddense->x : pointFrom->updateGN_dense;
@@ -724,8 +714,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
     }
     else
     {
-      if( DOGLEG_DEBUG )
-        SAY( "taking interpolated step");
+      SAY_IF_VERBOSE( "taking interpolated step");
 
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
@@ -748,8 +737,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
     if( fabs(update[i]) > UPDATE_THRESHOLD )
       return expectedImprovement;
 
-  if( DOGLEG_DEBUG )
-    SAY( "update small enough. Done iterating!");
+  SAY_IF_VERBOSE( "update small enough. Done iterating!");
 
   return -1.0;
 }
@@ -766,18 +754,14 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
   double observedImprovement = before->norm2_x - after->norm2_x;
 
   double rho = observedImprovement / expectedImprovement;
-  if( DOGLEG_DEBUG )
-  {
-    SAY( "observed/expected improvement: %.6g/%.6g. rho = %.6g",
-            observedImprovement, expectedImprovement, rho);
-  }
+  SAY_IF_VERBOSE( "observed/expected improvement: %.6g/%.6g. rho = %.6g",
+                  observedImprovement, expectedImprovement, rho);
 
 
   // adjust the trust region
   if( rho < TRUSTREGION_DECREASE_THRESHOLD )
   {
-    if( DOGLEG_DEBUG )
-      SAY( "rho too small. decreasing trust region");
+    SAY_IF_VERBOSE( "rho too small. decreasing trust region");
 
     // Our model doesn't fit well. We should reduce the trust region size. If
     // the trust region size was affecting the attempted step, do this by a
@@ -790,8 +774,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
   }
   else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
   {
-    if( DOGLEG_DEBUG )
-      SAY( "rho large enough. increasing trust region");
+    SAY_IF_VERBOSE( "rho large enough. increasing trust region");
 
     *trustregion *= TRUSTREGION_INCREASE_FACTOR;
   }
@@ -807,21 +790,16 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
     return stepCount;
 
-  if( DOGLEG_DEBUG )
-    SAY( "Initial operating point has norm2_x %.6g", ctx->beforeStep->norm2_x);
+  SAY_IF_VERBOSE( "Initial operating point has norm2_x %.6g", ctx->beforeStep->norm2_x);
 
 
   while( stepCount<MAX_ITERATIONS )
   {
-    if( DOGLEG_DEBUG )
-    {
-      SAY( "================= step %d", stepCount );
-    }
+    SAY_IF_VERBOSE( "================= step %d", stepCount );
 
     while(1)
     {
-      if( DOGLEG_DEBUG )
-        SAY("--------");
+      SAY_IF_VERBOSE("--------");
 
       double expectedImprovement =
         takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
@@ -831,14 +809,12 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         return stepCount;
 
       int afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
-      if( DOGLEG_DEBUG )
-        SAY( "Evaluated operating point with norm2_x %.6g", ctx->afterStep->norm2_x);
+      SAY_IF_VERBOSE( "Evaluated operating point with norm2_x %.6g", ctx->afterStep->norm2_x);
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
                                          expectedImprovement) )
       {
-        if( DOGLEG_DEBUG )
-          SAY( "accepted step");
+        SAY_IF_VERBOSE( "accepted step");
 
         stepCount++;
 
@@ -852,8 +828,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
 
         if( afterStepZeroGradient )
         {
-          if( DOGLEG_DEBUG )
-            SAY( "Gradient low enough and we just improved. Done iterating!" );
+          SAY_IF_VERBOSE( "Gradient low enough and we just improved. Done iterating!" );
 
           return stepCount;
         }
@@ -861,15 +836,13 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         break;
       }
 
-      if( DOGLEG_DEBUG )
-        SAY( "rejected step");
+      SAY_IF_VERBOSE( "rejected step");
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
       if(trustregion < TRUSTREGION_THRESHOLD)
       {
-        if( DOGLEG_DEBUG )
-          SAY( "trust region small enough. Giving up. Done iterating!");
+        SAY_IF_VERBOSE( "trust region small enough. Giving up. Done iterating!");
 
         return stepCount;
       }
@@ -878,8 +851,8 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
     }
   }
 
-  if( DOGLEG_DEBUG && stepCount == MAX_ITERATIONS)
-      SAY( "Exceeded max number of iterations");
+  if(stepCount == MAX_ITERATIONS)
+      SAY_IF_VERBOSE( "Exceeded max number of iterations");
 
   return stepCount;
 }
@@ -1057,8 +1030,7 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   if( returnContext == NULL )
     dogleg_freeContext(&ctx);
 
-  if( DOGLEG_DEBUG )
-    SAY( "success! took %d iterations", numsteps);
+  SAY_IF_VERBOSE( "success! took %d iterations", numsteps);
 
   return norm2_x;
 }
