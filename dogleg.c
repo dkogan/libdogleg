@@ -363,36 +363,36 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
                                 const dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->updateCauchy_valid)
-    return;
-  point->updateCauchy_valid = 1;
+  if(!point->updateCauchy_valid)
+  {
+    point->updateCauchy_valid = 1;
 
-  // I look at a step in the steepest direction that minimizes my
-  // quadratic error function (Cauchy point). If this is past my trust region,
-  // I move as far as the trust region allows along the steepest descent
-  // direction. My error function is F=norm2(f(p)). dF/dP = 2*ft*J.
-  // This is proportional to Jt_x, which is thus the steepest ascent direction.
-  //
-  // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
-  // point is where F(k) is at a minimum:
-  // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
-  // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
-  // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
-  // Summary:
-  // the steepest direction is parallel to Jt*x. The Cauchy point is at
-  // k*Jt*x where k = -norm2(Jt*x)/norm2(J*Jt*x)
-  double norm2_Jt_x       = norm2(point->Jt_x, ctx->Nstate);
-  double norm2_J_Jt_x     = ctx->is_sparse ?
-    norm2_mul_spmatrix_t_densevector(point->Jt, point->Jt_x) :
-    norm2_mul_matrix_vector         (point->J_dense, point->Jt_x, ctx->Nmeasurements, ctx->Nstate);
-  double k                = -norm2_Jt_x / norm2_J_Jt_x;
+    // I look at a step in the steepest direction that minimizes my
+    // quadratic error function (Cauchy point). If this is past my trust region,
+    // I move as far as the trust region allows along the steepest descent
+    // direction. My error function is F=norm2(f(p)). dF/dP = 2*ft*J.
+    // This is proportional to Jt_x, which is thus the steepest ascent direction.
+    //
+    // Thus along this direction we have F(k) = norm2(f(p + k Jt_x)). The Cauchy
+    // point is where F(k) is at a minimum:
+    // dF_dk = 2 f(p + k Jt_x)t  J Jt_x ~ (x + k J Jt_x)t J Jt_x =
+    // = xt J Jt x + k xt J Jt J Jt x = norm2(Jt x) + k norm2(J Jt x)
+    // dF_dk = 0 -> k= -norm2(Jt x) / norm2(J Jt x)
+    // Summary:
+    // the steepest direction is parallel to Jt*x. The Cauchy point is at
+    // k*Jt*x where k = -norm2(Jt*x)/norm2(J*Jt*x)
+    double norm2_Jt_x       = norm2(point->Jt_x, ctx->Nstate);
+    double norm2_J_Jt_x     = ctx->is_sparse ?
+      norm2_mul_spmatrix_t_densevector(point->Jt, point->Jt_x) :
+      norm2_mul_matrix_vector         (point->J_dense, point->Jt_x, ctx->Nmeasurements, ctx->Nstate);
+    double k                = -norm2_Jt_x / norm2_J_Jt_x;
 
-  point->updateCauchy_lensq = k*k * norm2_Jt_x;
+    point->updateCauchy_lensq = k*k * norm2_Jt_x;
 
-  vec_copy_scaled(point->updateCauchy,
-                  point->Jt_x, k, ctx->Nstate);
-
-  SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
+    vec_copy_scaled(point->updateCauchy,
+                    point->Jt_x, k, ctx->Nstate);
+    SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
+  }
 }
 
 // LAPACK prototypes for a packed cholesky factorization and a linear solve
@@ -511,54 +511,52 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->updateGN_valid)
-    return;
-
-  dogleg_computeJtJfactorization(point, ctx);
-
-  // try to factorize the matrix directly. If it's singular, add a small
-  // constant to the diagonal. This constant gets larger if we keep being
-  // singular
-  if( ctx->is_sparse )
+  if(!point->updateGN_valid)
   {
-    // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
-    cholmod_dense Jt_x_dense = {.nrow  = ctx->Nstate,
-                                .ncol  = 1,
-                                .nzmax = ctx->Nstate,
-                                .d     = ctx->Nstate,
-                                .x     = point->Jt_x,
-                                .xtype = CHOLMOD_REAL,
-                                .dtype = CHOLMOD_DOUBLE};
+    dogleg_computeJtJfactorization(point, ctx);
 
-    if(point->updateGN_cholmoddense != NULL)
-      cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
+    // try to factorize the matrix directly. If it's singular, add a small
+    // constant to the diagonal. This constant gets larger if we keep being
+    // singular
+    if( ctx->is_sparse )
+    {
+      // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
+      cholmod_dense Jt_x_dense = {.nrow  = ctx->Nstate,
+                                  .ncol  = 1,
+                                  .nzmax = ctx->Nstate,
+                                  .d     = ctx->Nstate,
+                                  .x     = point->Jt_x,
+                                  .xtype = CHOLMOD_REAL,
+                                  .dtype = CHOLMOD_DOUBLE};
 
-    point->updateGN_cholmoddense = cholmod_solve(CHOLMOD_A,
-                                                 ctx->factorization,
-                                                 &Jt_x_dense,
-                                                 &ctx->common);
-    vec_negate(point->updateGN_cholmoddense->x,
-               ctx->Nstate); // should be more efficient than this later
+      if(point->updateGN_cholmoddense != NULL)
+        cholmod_free_dense(&point->updateGN_cholmoddense, &ctx->common);
 
-    point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
+      point->updateGN_cholmoddense = cholmod_solve(CHOLMOD_A,
+                                                   ctx->factorization,
+                                                   &Jt_x_dense,
+                                                   &ctx->common);
+      vec_negate(point->updateGN_cholmoddense->x,
+                 ctx->Nstate); // should be more efficient than this later
+
+      point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
+    }
+    else
+    {
+      memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
+      int info;
+      dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
+              ctx->factorization_dense,
+              point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+      vec_negate(point->updateGN_dense,
+                 ctx->Nstate); // should be more efficient than this later
+
+      point->updateGN_lensq = norm2(point->updateGN_dense, ctx->Nstate);
+    }
+
+    SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->updateGN_lensq));
+    point->updateGN_valid = 1;
   }
-  else
-  {
-    memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
-    int info;
-    dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
-            ctx->factorization_dense,
-            point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
-    vec_negate(point->updateGN_dense,
-               ctx->Nstate); // should be more efficient than this later
-
-    point->updateGN_lensq = norm2(point->updateGN_dense, ctx->Nstate);
-  }
-
-
-  SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->updateGN_lensq));
-
-  point->updateGN_valid = 1;
 }
 
 static void computeInterpolatedUpdate(double*                  update_dogleg,
