@@ -766,7 +766,9 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 // takes a step from the given operating point, using the given trust region
 // radius. Returns the expected improvement, based on the step taken and the
 // linearized x(p). If we can stop iterating, returns a negative number
-static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
+static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
+                           double* p_new,
+                           double* step,
                            double trustregion, dogleg_solverContext_t* ctx)
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
@@ -775,10 +777,6 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
     vnlog_debug_data.trustregion_before = trustregion;
     vnlog_debug_data.norm2x_before      = pointFrom->norm2_x;
   }
-
-  double update_array[ctx->Nstate];
-  double* update;
-
 
   computeCauchyUpdate(pointFrom, ctx);
 
@@ -793,11 +791,10 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
-    vec_copy_scaled(update_array,
+    vec_copy_scaled(step,
                     pointFrom->updateCauchy,
                     trustregion / sqrt(pointFrom->updateCauchy_lensq),
                     ctx->Nstate);
-    update = update_array;
     pointFrom->didStepToEdgeOfTrustRegion = 1;
   }
   else
@@ -819,7 +816,9 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
       }
 
       // full Gauss-Newton step lies within my trust region. Take the full step
-      update = ctx->is_sparse ? pointFrom->updateGN_cholmoddense->x : pointFrom->updateGN_dense;
+      memcpy( step,
+              ctx->is_sparse ? pointFrom->updateGN_cholmoddense->x : pointFrom->updateGN_dense,
+              ctx->Nstate * sizeof(step[0]) );
       pointFrom->didStepToEdgeOfTrustRegion = 0;
     }
     else
@@ -834,8 +833,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
-      computeInterpolatedUpdate(update_array, pointFrom, trustregion, ctx);
-      update = update_array;
+      computeInterpolatedUpdate(step, pointFrom, trustregion, ctx);
       pointFrom->didStepToEdgeOfTrustRegion = 1;
     }
   }
@@ -843,15 +841,15 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom, double* newp,
 
 
   // take the step
-  vec_add(newp, pointFrom->p, update, ctx->Nstate);
-  double expectedImprovement = computeExpectedImprovement(update, pointFrom, ctx);
+  vec_add(p_new, pointFrom->p, step, ctx->Nstate);
+  double expectedImprovement = computeExpectedImprovement(step, pointFrom, ctx);
   if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
     vnlog_debug_data.expected_improvement = expectedImprovement;
 
   // are we done? For each state variable I look at the update step. If all the elements fall below
   // a threshold, I call myself done
   for(int i=0; i<ctx->Nstate; i++)
-    if( fabs(update[i]) > UPDATE_THRESHOLD )
+    if( fabs(step[i]) > UPDATE_THRESHOLD )
       return expectedImprovement;
 
   SAY_IF_VERBOSE( "update small enough. Done iterating!");
@@ -925,7 +923,10 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       SAY_IF_VERBOSE("--------");
 
       double expectedImprovement =
-        takeStepFrom(ctx->beforeStep, ctx->afterStep->p, trustregion, ctx);
+        takeStepFrom(ctx->beforeStep,
+                     ctx->afterStep->p,
+                     ctx->afterStep->step_to_here,
+                     trustregion, ctx);
 
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
@@ -1001,6 +1002,7 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
     Nstate          +
     numMeasurements +
     Nstate          +
+    Nstate          +
     Nstate;
   if(!is_sparse)
     Npool += numMeasurements*Nstate + Nstate;
@@ -1014,6 +1016,10 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
                               numMeasurements];
   point->updateCauchy = &pool[Nstate +
                               numMeasurements +
+                              Nstate];
+  point->step_to_here = &pool[Nstate +
+                              numMeasurements +
+                              Nstate +
                               Nstate];
 
   if( is_sparse )
@@ -1032,9 +1038,11 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
     point->J_dense = &pool[Nstate +
                            numMeasurements +
                            Nstate +
+                           Nstate +
                            Nstate];
     point->updateGN_dense = &pool[Nstate +
                                   numMeasurements +
+                                  Nstate +
                                   Nstate +
                                   Nstate +
                                   numMeasurements * Nstate];

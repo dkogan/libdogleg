@@ -48,6 +48,9 @@ typedef struct
   int updateCauchy_valid, updateGN_valid;
 
   int didStepToEdgeOfTrustRegion;
+
+  double* step_to_here;
+
 } dogleg_operatingPoint_t;
 
 // solver context. This has all the internal state of the solver
