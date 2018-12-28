@@ -113,6 +113,7 @@ static void vnlog_debug_emit_record(int iteration, int step_accepted)
     printf("%d %d ", iteration, step_accepted);
     VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_EMIT_FIELD);
     printf("\n");
+    fflush(stdout);
     vnlog_debug_reset();
   }
 }
