@@ -834,11 +834,6 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
     else
     {
       SAY_IF_VERBOSE( "taking interpolated step");
-      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
-      {
-        vnlog_debug_data.step_type = STEPTYPE_INTERPOLATED;
-        vnlog_debug_data.step_len  = vnlog_debug_data.step_len_interpolated;
-      }
 
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
@@ -847,6 +842,11 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
                                 step_len_sq,
                                 pointFrom, trustregion, ctx);
       pointFrom->didStepToEdgeOfTrustRegion = 1;
+      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+      {
+        vnlog_debug_data.step_type = STEPTYPE_INTERPOLATED;
+        vnlog_debug_data.step_len  = vnlog_debug_data.step_len_interpolated;
+      }
     }
   }
 
