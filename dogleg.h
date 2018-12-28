@@ -20,6 +20,10 @@ typedef void (dogleg_callback_dense_t)(const double*   p,
 // an operating point of the solver
 typedef struct
 {
+  // The pointers in this structure are all indices into a single "pool" array
+  // (see allocOperatingPoint()). I thus don't need to store the pointers at
+  // all, and can just index that one array directly, but that would break my
+  // ABI
   double*         p;
   double*         x;
   double          norm2_x;

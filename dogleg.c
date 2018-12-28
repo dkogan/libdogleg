@@ -987,7 +987,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
 }
 
 static
-dogleg_operatingPoint_t* allocOperatingPoint(int      Nstate, int numMeasurements,
+dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
                                              unsigned int NJnnz,
                                              cholmod_common* common)
 {
@@ -996,11 +996,25 @@ dogleg_operatingPoint_t* allocOperatingPoint(int      Nstate, int numMeasurement
   dogleg_operatingPoint_t* point = malloc(sizeof(dogleg_operatingPoint_t));
   ASSERT(point != NULL);
 
-  point->p = malloc(Nstate * sizeof(point->p[0]));
-  ASSERT(point->p != NULL);
 
-  point->x = malloc(numMeasurements * sizeof(point->x[0]));
-  ASSERT(point->x != NULL);
+  int Npool =
+    Nstate          +
+    numMeasurements +
+    Nstate          +
+    Nstate;
+  if(!is_sparse)
+    Npool += numMeasurements*Nstate + Nstate;
+
+  double* pool = malloc( Npool * sizeof(double) );
+  ASSERT( pool != NULL );
+
+  point->p            = &pool[0];
+  point->x            = &pool[Nstate];
+  point->Jt_x         = &pool[Nstate +
+                              numMeasurements];
+  point->updateCauchy = &pool[Nstate +
+                              numMeasurements +
+                              Nstate];
 
   if( is_sparse )
   {
@@ -1015,19 +1029,16 @@ dogleg_operatingPoint_t* allocOperatingPoint(int      Nstate, int numMeasurement
   }
   else
   {
-    point->J_dense = malloc( numMeasurements * Nstate * sizeof(point->J_dense[0]) );
-    ASSERT(point->J_dense != NULL);
-
-    point->updateGN_dense = malloc( Nstate * sizeof(point->updateGN_dense[0]) );
-    ASSERT(point->updateGN_dense != NULL);
+    point->J_dense = &pool[Nstate +
+                           numMeasurements +
+                           Nstate +
+                           Nstate];
+    point->updateGN_dense = &pool[Nstate +
+                                  numMeasurements +
+                                  Nstate +
+                                  Nstate +
+                                  numMeasurements * Nstate];
   }
-
-  // the 1-column vector Jt * x
-  point->Jt_x = malloc(Nstate * sizeof(point->Jt_x[0]));
-  ASSERT(point->Jt_x != NULL);
-
-  // the cached update vectors
-  point->updateCauchy          = malloc(Nstate * sizeof(point->updateCauchy[0]));
 
   // vectors don't have any valid data yet
   point->updateCauchy_valid = 0;
@@ -1038,8 +1049,9 @@ dogleg_operatingPoint_t* allocOperatingPoint(int      Nstate, int numMeasurement
 
 static void freeOperatingPoint(dogleg_operatingPoint_t** point, cholmod_common* common)
 {
+  // MUST match allocOperatingPoint(). It does a single malloc() and stores the
+  // pointer into p
   free((*point)->p);
-  free((*point)->x);
 
   int is_sparse = common != NULL;
 
@@ -1050,14 +1062,6 @@ static void freeOperatingPoint(dogleg_operatingPoint_t** point, cholmod_common* 
     if((*point)->updateGN_cholmoddense != NULL)
       cholmod_free_dense(&(*point)->updateGN_cholmoddense, common);
   }
-  else
-  {
-    free( (*point)->J_dense );
-    free( (*point)->updateGN_dense );
-  }
-
-  free((*point)->Jt_x);
-  free((*point)->updateCauchy);
 
   free(*point);
   *point = NULL;
