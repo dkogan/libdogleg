@@ -50,6 +50,7 @@ typedef struct
   int didStepToEdgeOfTrustRegion;
 
   double* step_to_here;
+  double  step_to_here_len_sq;
 
 } dogleg_operatingPoint_t;
 

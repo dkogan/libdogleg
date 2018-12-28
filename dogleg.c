@@ -65,6 +65,7 @@ typedef enum { VNLOG_DEBUG_STEP_TYPE_LIST(VNLOG_DEBUG_STEP_TYPE_NAME_COMMA)
   _(double,                  k_cauchy_to_gn,        INFINITY)      \
   _(double,                  step_len,              INFINITY)      \
   _(vnlog_debug_step_type_t, step_type,             STEPTYPE_UNINITIALIZED) \
+  _(double,                  step_direction_change_deg, INFINITY)      \
   _(double,                  expected_improvement,  INFINITY)      \
   _(double,                  observed_improvement,  INFINITY)      \
   _(double,                  rho,                   INFINITY)      \
@@ -652,6 +653,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
 }
 
 static void computeInterpolatedUpdate(double*                  update_dogleg,
+                                      double*                  update_dogleg_lensq,
                                       dogleg_operatingPoint_t* point,
                                       double                   trustregion,
                                       const dogleg_solverContext_t* ctx)
@@ -694,15 +696,19 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   }
   double k = (neg_c + sqrt(discriminant))/l2;
 
+  *update_dogleg_lensq = 0.0;
   for(int i=0; i<ctx->Nstate; i++)
+  {
     update_dogleg[i] = a[i] + k*(b[i] - a[i]);
+    *update_dogleg_lensq += update_dogleg[i]*update_dogleg[i];
+  }
 
   SAY_IF_VERBOSE( "k_cauchy_to_gn %.6g, norm %.6g",
                   k,
-                  sqrt(norm2(update_dogleg, ctx->Nstate)));
+                  sqrt(*update_dogleg_lensq));
   if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
   {
-    vnlog_debug_data.step_len_interpolated = sqrt(norm2(update_dogleg, ctx->Nstate));
+    vnlog_debug_data.step_len_interpolated = sqrt(*update_dogleg_lensq);
     vnlog_debug_data.k_cauchy_to_gn        = k;
   }
 }
@@ -769,6 +775,7 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
                            double* p_new,
                            double* step,
+                           double* step_len_sq,
                            double trustregion, dogleg_solverContext_t* ctx)
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
@@ -788,6 +795,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
       vnlog_debug_data.step_type = STEPTYPE_CAUCHY;
       vnlog_debug_data.step_len  = vnlog_debug_data.step_len_cauchy;
     }
+    *step_len_sq = pointFrom->updateCauchy_lensq;
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
@@ -814,6 +822,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
         vnlog_debug_data.step_type = STEPTYPE_GAUSSNEWTON;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_gauss_newton;
       }
+      *step_len_sq = pointFrom->updateGN_lensq;
 
       // full Gauss-Newton step lies within my trust region. Take the full step
       memcpy( step,
@@ -833,18 +842,35 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
-      computeInterpolatedUpdate(step, pointFrom, trustregion, ctx);
+      computeInterpolatedUpdate(step,
+                                step_len_sq,
+                                pointFrom, trustregion, ctx);
       pointFrom->didStepToEdgeOfTrustRegion = 1;
     }
   }
-
-
 
   // take the step
   vec_add(p_new, pointFrom->p, step, ctx->Nstate);
   double expectedImprovement = computeExpectedImprovement(step, pointFrom, ctx);
   if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  {
     vnlog_debug_data.expected_improvement = expectedImprovement;
+
+    if(pointFrom->step_to_here_len_sq != INFINITY)
+    {
+      double cos_direction_change =
+        inner(step, pointFrom->step_to_here, ctx->Nstate) /
+        sqrt(*step_len_sq * pointFrom->step_to_here_len_sq);
+
+      // check the numerical overflow cases
+      if(cos_direction_change >= 1.0)
+        vnlog_debug_data.step_direction_change_deg = 0.0;
+      else if(cos_direction_change <= -1.0)
+        vnlog_debug_data.step_direction_change_deg = 180.0;
+      else
+        vnlog_debug_data.step_direction_change_deg = 180.0/M_PI*acos(cos_direction_change);
+    }
+  }
 
   // are we done? For each state variable I look at the update step. If all the elements fall below
   // a threshold, I call myself done
@@ -914,6 +940,8 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   SAY_IF_VERBOSE( "Initial operating point has norm2_x %.6g", ctx->beforeStep->norm2_x);
 
 
+  ctx->beforeStep->step_to_here_len_sq = INFINITY;
+
   while( stepCount<MAX_ITERATIONS )
   {
     SAY_IF_VERBOSE( "================= step %d", stepCount );
@@ -926,6 +954,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         takeStepFrom(ctx->beforeStep,
                      ctx->afterStep->p,
                      ctx->afterStep->step_to_here,
+                     &ctx->afterStep->step_to_here_len_sq,
                      trustregion, ctx);
 
       // negative expectedImprovement is used to indicate that we're done
