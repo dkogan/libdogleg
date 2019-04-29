@@ -90,11 +90,13 @@ static void vnlog_debug_emit_legend(void)
     printf("# iteration step_accepted" VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_SPACE_FIELD_NAME) "\n");
   }
 }
+__attribute__((unused))
 static void vnlog_emit_double(double x)
 {
   if(x == INFINITY) printf("- ");
   else              printf("%g ", x);
 }
+__attribute__((unused))
 static void vnlog_emit_int(int x)
 {
   if(x == -1) printf("- ");
