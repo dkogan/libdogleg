@@ -1442,7 +1442,7 @@ Then
   2 x*t J* dp = -2 x*t J* inv(JtJ)J*t B x* =
               = -2 x*t A B x* =
               = x*t (-2AB) x* =
-              = x*t (-2I - 2B) x* =
+              = x*t (-2I - 2B) x*
 
   norm2(J* dp) = x*t ( B J* inv() J*tJ* inv() J*t B ) x* =
                = x*t ( B A A B ) x* =
@@ -1450,12 +1450,78 @@ Then
 
   norm2(x*)    = x*t ( I ) x*
 
+There're two ways to compute the "Dima's self-only" factor. I can simply say
+that the measurements' cost of norm2(x*) has been removed, so the factor is x*t
+I x* or I can
+
+1. Remove measurements
+2. Re-optimize
+3. Look to see how the residual of x* changes
+
+This is different because I look at what happens to x*(p) when x* is no longer
+in the optimized set.
+
+State moves by dp. x* moves by J* dp. I look at
+
+  dE = norm2(x* + J* dp) - norm2(x*)
+     = 2 x*t J* dp + norm2(J* dp) =
+     = x*t (-2I - 2B + I + 2B + B*B ) x* =
+     = x*t (B*B - I) x*
+
+I expect that removing measurements from the optimization should make their
+residuals worse. I.e. I expect dE > 0. Let's check. Is B*B - I positive
+definite? Let's say that there's v,l such that
+
+  (B*B-I)v = l v, norm2(v) = 1
+  -->
+  BBv      = (l+1)v
+  vBBv     = l+1
+
+  Let u = Bv ->
+  norm2(u) = l+1
+
+  A = J* inv(JtJ) J*t
+  B = inv(A - I) ->
+
+  v = (A-I)u
+  norm2(v) = 1 = norm2(Au) - 2ut A u + norm2(u) ->
+  -> l = 2ut A u - norm2(Au)
+
+  Let w = J*t u
+  -> Au = J* inv(JtJ) w
+  -> ut A u = wt inv(JtJ) w ->
+  l = wt ( 2inv(JtJ) - inv(JtJ)J*tJ* inv(JtJ) ) w
+
+  J*t J* = sum(outer(j*,j*)) = sum(outer(j,j)) - sum(outer(jnot*,jnot*)) =
+         = JtJ - Jnot*t Jnot*
+
+  -> l = wt ( 2inv(JtJ) - inv(JtJ)JtJinv(JtJ) + inv(JtJ)Jnot*tJnot* inv(JtJ) ) w
+       = wt (  inv(JtJ) + inv(JtJ)Jnot*tJnot* inv(JtJ) ) w
+
+  -> substitute -> l = wt ( C + CDC ) w
+
+  where C >= 0 and D >= 0
+
+  wt C wt >= 0
+
+  wt CDC wt = (Ctw)t D Ctw >= 0 -> l >= 0
+
+So B*B-I >= 0 and dE >= 0: removing a point will never make its own fit better
+
+- if dE >> 0: the other data does NOT support this measurement being correct
+- if dE ~~ 0: the other data supports this measurement being correct
+
+
 Putting all this together I get the expressions for the factors above:
 
-  Dima's self+others: x*t (-B      ) x*
-  Dima's others     : x*t (-B - I  ) x*
-  Cook's self+others: x*t ( B + B*B) x*
-  Cook's others     : x*t (-B - I  ) x*
+  Dima's self+others:        x*t (-B      ) x*
+  Dima's others     :        x*t (-B - I  ) x*
+  Dima's self (simple):      x*t ( I      ) x*
+  Dima's self (interesting): x*t (B*B - I ) x*
+  Cook's self+others:        x*t ( B + B*B) x*
+  Cook's others     :        x*t (-B - I  ) x*
+
+
 
 One can also do a similar analysis to gauge our confidence in a solution. We can
 do this by
@@ -1489,9 +1555,8 @@ If we add x* and move by dp, we get
 
   E1 = norm2(x + J dp) + norm2( x* + J* dp )
 
-where x* and J* refer to the new measurements. Thus "Dima's self+others factor"
-is (norm2(x + J dp) + norm2( x* + J* dp )) - norm2(x) = norm2(Jdp) + norm2( x* +
-J* dp )
+Thus "Dima's self+others factor" is (norm2(x + J dp) + norm2( x* + J* dp )) -
+norm2(x) = norm2(Jdp) + norm2( x* + J* dp )
 
 We can choose to look at ONLY the effect on the other variables. That would
 produce "Dima's others factor" norm2(x + J dp) - norm2(x) = norm2(Jdp)
@@ -1552,7 +1617,7 @@ Then
   2 x*t J* dp = -2 x*t J* inv(JtJ)J*t B x* =
               = -2 x*t A B x* =
               = x*t (-2AB) x* =
-              = x*t (-2I + 2B) x* =
+              = x*t (-2I + 2B) x*
 
   norm2(J* dp) = x*t ( B J* inv() J*tJ* inv() J*t B ) x* =
                = x*t ( B A A B ) x* =
@@ -1560,12 +1625,52 @@ Then
 
   norm2(x*)    = x*t ( I ) x*
 
+How do I compute "Dima's self" factor? The "simple" flavor from above looks at
+the new measurement only: norm2(x*). The "interesting" flavor, look at what
+happens to the measurements' error when they're added to the optimization set.
+State moves by dp. x* moves by J* dp. I look at
+
+  dE = norm2(x* + J*dp) - norm2(x*) =
+       2 x*t J* dp + norm2(J* dp) =
+       x*t (-2I + 2B + I - 2B + B*B) x* =
+       x*t (B*B - I) x*
+
+I expect that adding a point to the optimization would make it fit better: dE <
+0. Let's check. Let's say that there's v,l such that
+
+  (B*B-I)v = l v, norm2(v) = 1
+  -->
+  BBv      = (l+1)v
+  vBBv     = l+1
+
+  Let u = Bv ->
+  norm2(u) = l+1
+
+  A = J* inv(JtJ) J*t
+  B = inv(A + I) ->
+
+  v = (A+I)u
+  norm2(v) = 1 = norm2(Au) + 2ut A u + norm2(u) ->
+  -> l = -2ut A u - norm2(Au)
+
+  Let w = J*t u
+  -> Au = J* inv(JtJ) w
+  -> ut A u = wt inv(JtJ) w ->
+  l = -2 wt inv(JtJ) w - norm2(Au)
+
+  Since inv(JtJ) > 0 -> l < 0. As expected
+
+So B*B-I is negative definite: adding measurements to the optimization set makes
+them fit better
+
 Putting all this together I get the expressions for the factors above:
 
-  Dima's self+others: x*t (B      ) x*
-  Dima's others     : x*t (B - B*B) x*
-  Cook's self+others: x*t (I - B  ) x*
-  Cook's others     : x*t (B - B*B) x*
+  Dima's self+others:        x*t (B      ) x*
+  Dima's others     :        x*t (B - B*B) x*
+  Dima's self (simple):      x*t (I      ) x*
+  Dima's self (interesting): x*t (B*B - I) x*
+  Cook's self+others:        x*t (I - B  ) x*
+  Cook's others     :        x*t (B - B*B) x*
 
 These expressions are all tested and verified in
 mrcal/analyses/outlierness-test.py
@@ -2062,9 +2167,11 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
     mean at project(q) (so that x has mean 0). I conceivably have a distribution
     for xref and I know its variance. For a quadratic form I can compute the
     expected value E(x*t C x) = trace(C Var(x*)). I'm going to assume that x*
-    are all independent and identical, so Var(x*) is proportional to the
-    identity, and E(x*t C x) = trace(C) Var(x*). I thus let the caller deal with
-    the variance, and I just return
+    are all independent and identical, so Var(x*) = observation_variance*I, and
+    E(x*t C x) = trace(C) observation_variance. I thus let the caller deal with
+    the observation variance, and I just return trace(C). The test at
+    mrcal/analyses/outlierness-test.py suggests that "Dima's self+others" is the
+    metric we want to use, so C = B = inv(J* inv(JtJ) J*t + I)
 
     k*trace(inv(I + J* inv(JtJ) J*t))
 
