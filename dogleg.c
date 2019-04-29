@@ -95,6 +95,12 @@ static void vnlog_emit_double(double x)
   if(x == INFINITY) printf("- ");
   else              printf("%g ", x);
 }
+static void vnlog_emit_int(int x)
+{
+  if(x == -1) printf("- ");
+  else        printf("%d ", x);
+}
+__attribute__((unused))
 static void vnlog_emit_vnlog_debug_step_type_t(vnlog_debug_step_type_t x)
 {
 #define VNLOG_DEBUG_STEP_TYPE_SWITCH_EMIT(name,shortname) case name: printf(shortname " "); break;
