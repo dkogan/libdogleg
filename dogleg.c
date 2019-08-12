@@ -117,20 +117,22 @@ static void vnlog_debug_emit_record(int iteration, int step_accepted)
 
 // Default parameters. Used only by the original API, which uses a global set of
 // parameters
-static const dogleg_parameters2_t parameters_default =
-  {
-    .max_iterations                 = 100,
-    .dogleg_debug                   = 0,
-    .trustregion0                   = 1.0e3,
-    .trustregion_decrease_factor    = 0.1,
-    .trustregion_decrease_threshold = 0.25,
-    .trustregion_increase_factor    = 2,
-    .trustregion_increase_threshold = 0.75,
-    .Jt_x_threshold                 = 1e-8,
-    .update_threshold               = 1e-8,
-    .trustregion_threshold          = 1e-8
-  };
-static dogleg_parameters2_t parameters_global = parameters_default;
+#define PARAMETERS_DEFAULT                      \
+  {                                             \
+    .max_iterations                 = 100,      \
+    .dogleg_debug                   = 0,        \
+    .trustregion0                   = 1.0e3,    \
+    .trustregion_decrease_factor    = 0.1,      \
+    .trustregion_decrease_threshold = 0.25,     \
+    .trustregion_increase_factor    = 2,        \
+    .trustregion_increase_threshold = 0.75,     \
+    .Jt_x_threshold                 = 1e-8,     \
+    .update_threshold               = 1e-8,     \
+    .trustregion_threshold          = 1e-8      \
+  }
+
+static const dogleg_parameters2_t parameters_default = PARAMETERS_DEFAULT;
+static       dogleg_parameters2_t parameters_global  = PARAMETERS_DEFAULT;
 void dogleg_getDefaultParameters(dogleg_parameters2_t* parameters)
 {
   *parameters = parameters_default;
