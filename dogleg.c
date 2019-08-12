@@ -24,7 +24,9 @@
 #define DOGLEG_DEBUG_OTHER_THAN_VNLOG (~DOGLEG_DEBUG_VNLOG)
 #define SAY_NONEWLINE(fmt, ...) fprintf(stderr, "libdogleg at %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 #define SAY(fmt, ...)           do {  SAY_NONEWLINE(fmt, ## __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
-#define SAY_IF_VERBOSE(fmt,...) do { if( DOGLEG_DEBUG & DOGLEG_DEBUG_OTHER_THAN_VNLOG ) SAY(fmt, ##__VA_ARGS__); } while(0)
+
+// This REQUIRES that a "dogleg_solverContext_t* ctx" be available
+#define SAY_IF_VERBOSE(fmt,...) do { if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_OTHER_THAN_VNLOG ) SAY(fmt, ##__VA_ARGS__); } while(0)
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x " is not true"); exit(1); } } while(0)
@@ -34,14 +36,6 @@
 #define I(A, index) ((unsigned int*)((A)->i))[index]
 #define X(A, index) ((double*      )((A)->x))[index]
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// parameter stuff
-//////////////////////////////////////////////////////////////////////////////////////////
-// These are the optimizer parameters. They have semi-arbitrary defaults. The
-// user should adjust them through the API
-static int MAX_ITERATIONS = 100;
-static int DOGLEG_DEBUG   = 0;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // vnlog debugging stuff
@@ -84,11 +78,9 @@ static void vnlog_debug_reset(void)
 static void vnlog_debug_emit_legend(void)
 {
 #define VNLOG_DEBUG_SPACE_FIELD_NAME(type, name, initialvalue) " " #name
-  if( DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG )
-  {
-    vnlog_debug_reset();
-    printf("# iteration step_accepted" VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_SPACE_FIELD_NAME) "\n");
-  }
+
+  vnlog_debug_reset();
+  printf("# iteration step_accepted" VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_SPACE_FIELD_NAME) "\n");
 }
 __attribute__((unused))
 static void vnlog_emit_double(double x)
@@ -114,37 +106,35 @@ static void vnlog_emit_vnlog_debug_step_type_t(vnlog_debug_step_type_t x)
 }
 static void vnlog_debug_emit_record(int iteration, int step_accepted)
 {
-#define VNLOG_DEBUG_EMIT_FIELD(type, name, initialvalue) \
-  vnlog_emit_ ## type(vnlog_debug_data.name);
-  if( DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG )
-  {
-    printf("%d %d ", iteration, step_accepted);
-    VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_EMIT_FIELD);
-    printf("\n");
-    fflush(stdout);
-    vnlog_debug_reset();
-  }
+#define VNLOG_DEBUG_EMIT_FIELD(type, name, initialvalue) vnlog_emit_ ## type(vnlog_debug_data.name);
+
+  printf("%d %d ", iteration, step_accepted);
+  VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_EMIT_FIELD);
+  printf("\n");
+  fflush(stdout);
+  vnlog_debug_reset();
 }
 
-
-
-// it is cheap to reject a too-large trust region, so I start with something
-// "large". The solver will quickly move down to something reasonable. Only the
-// user really knows if this is "large" or not, so they should change this via
-// the API
-static double TRUSTREGION0 = 1.0e3;
-
-// These are probably OK to leave alone. Tweaking them can maybe result in
-// slightly faster convergence
-static double TRUSTREGION_DECREASE_FACTOR    = 0.1;
-static double TRUSTREGION_INCREASE_FACTOR    = 2;
-static double TRUSTREGION_INCREASE_THRESHOLD = 0.75;
-static double TRUSTREGION_DECREASE_THRESHOLD = 0.25;
-
-// The termination thresholds. Documented in the header
-static double JT_X_THRESHOLD        = 1e-8;
-static double UPDATE_THRESHOLD      = 1e-8;
-static double TRUSTREGION_THRESHOLD = 1e-8;
+// Default parameters. Used only by the original API, which uses a global set of
+// parameters
+static const dogleg_parameters2_t parameters_default =
+  {
+    .max_iterations                 = 100,
+    .dogleg_debug                   = 0,
+    .trustregion0                   = 1.0e3,
+    .trustregion_decrease_factor    = 0.1,
+    .trustregion_decrease_threshold = 0.25,
+    .trustregion_increase_factor    = 2,
+    .trustregion_increase_threshold = 0.75,
+    .Jt_x_threshold                 = 1e-8,
+    .update_threshold               = 1e-8,
+    .trustregion_threshold          = 1e-8
+  };
+static dogleg_parameters2_t parameters_global = parameters_default;
+void dogleg_getDefaultParameters(dogleg_parameters2_t* parameters)
+{
+  *parameters = parameters_default;
+}
 
 // if I ever see a singular JtJ, I factor JtJ + LAMBDA*I from that point on
 #define LAMBDA_INITIAL 1e-10
@@ -152,31 +142,31 @@ static double TRUSTREGION_THRESHOLD = 1e-8;
 // these parameters likely should be messed with
 void dogleg_setDebug(int debug)
 {
-  DOGLEG_DEBUG = debug;
+  parameters_global.dogleg_debug = debug;
 }
 void dogleg_setInitialTrustregion(double t)
 {
-  TRUSTREGION0 = t;
+  parameters_global.trustregion0 = t;
 }
 void dogleg_setThresholds(double Jt_x, double update, double trustregion)
 {
-  if(Jt_x > 0.0)        JT_X_THRESHOLD        = Jt_x;
-  if(update > 0.0)      UPDATE_THRESHOLD      = update;
-  if(trustregion > 0.0) TRUSTREGION_THRESHOLD = trustregion;
+  if(Jt_x > 0.0)        parameters_global.Jt_x_threshold        = Jt_x;
+  if(update > 0.0)      parameters_global.update_threshold      = update;
+  if(trustregion > 0.0) parameters_global.trustregion_threshold = trustregion;
 }
 
 // these parameters likely should not be messed with.
 void dogleg_setMaxIterations(int n)
 {
-  MAX_ITERATIONS = n;
+  parameters_global.max_iterations = n;
 }
 void dogleg_setTrustregionUpdateParameters(double downFactor, double downThreshold,
                                            double upFactor,   double upThreshold)
 {
-  TRUSTREGION_DECREASE_FACTOR    = downFactor;
-  TRUSTREGION_DECREASE_THRESHOLD = downThreshold;
-  TRUSTREGION_INCREASE_FACTOR    = upFactor;
-  TRUSTREGION_INCREASE_THRESHOLD = upThreshold;
+  parameters_global.trustregion_decrease_factor    = downFactor;
+  parameters_global.trustregion_decrease_threshold = downThreshold;
+  parameters_global.trustregion_increase_factor    = upFactor;
+  parameters_global.trustregion_increase_threshold = upThreshold;
 }
 
 
@@ -489,7 +479,7 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
     SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
   }
 
-  if( DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG )
+  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
     vnlog_debug_data.step_len_cauchy = sqrt(point->updateCauchy_lensq);
 }
 
@@ -656,7 +646,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
     point->updateGN_valid = 1;
   }
 
-  if( DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG )
+  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
     vnlog_debug_data.step_len_gauss_newton = sqrt(point->updateGN_lensq);
 
 }
@@ -715,7 +705,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   SAY_IF_VERBOSE( "k_cauchy_to_gn %.6g, norm %.6g",
                   k,
                   sqrt(*update_dogleg_lensq));
-  if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
   {
     vnlog_debug_data.step_len_interpolated = sqrt(*update_dogleg_lensq);
     vnlog_debug_data.k_cauchy_to_gn        = k;
@@ -755,7 +745,7 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
   // If the largest absolute gradient element is smaller than the threshold,
   // we can stop iterating. This is equivalent to the inf-norm
   for(int i=0; i<ctx->Nstate; i++)
-    if(fabs(point->Jt_x[i]) > JT_X_THRESHOLD)
+    if(fabs(point->Jt_x[i]) > ctx->parameters->Jt_x_threshold)
       return 0;
   SAY_IF_VERBOSE( "Jt_x all below the threshold. Done iterating!");
 
@@ -785,10 +775,11 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
                            double* p_new,
                            double* step,
                            double* step_len_sq,
-                           double trustregion, dogleg_solverContext_t* ctx)
+                           double trustregion,
+                           dogleg_solverContext_t* ctx)
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
-  if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
   {
     vnlog_debug_data.trustregion_before = trustregion;
     vnlog_debug_data.norm2x_before      = pointFrom->norm2_x;
@@ -799,7 +790,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
   if(pointFrom->updateCauchy_lensq >= trustregion*trustregion)
   {
     SAY_IF_VERBOSE( "taking cauchy step");
-    if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+    if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
     {
       vnlog_debug_data.step_type = STEPTYPE_CAUCHY;
       vnlog_debug_data.step_len  = vnlog_debug_data.step_len_cauchy;
@@ -826,7 +817,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
     if(pointFrom->updateGN_lensq <= trustregion*trustregion)
     {
       SAY_IF_VERBOSE( "taking GN step");
-      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
       {
         vnlog_debug_data.step_type = STEPTYPE_GAUSSNEWTON;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_gauss_newton;
@@ -850,7 +841,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
                                 step_len_sq,
                                 pointFrom, trustregion, ctx);
       pointFrom->didStepToEdgeOfTrustRegion = 1;
-      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
       {
         vnlog_debug_data.step_type = STEPTYPE_INTERPOLATED;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_interpolated;
@@ -861,7 +852,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
   // take the step
   vec_add(p_new, pointFrom->p, step, ctx->Nstate);
   double expectedImprovement = computeExpectedImprovement(step, pointFrom, ctx);
-  if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
   {
     vnlog_debug_data.expected_improvement = expectedImprovement;
 
@@ -884,7 +875,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
   // are we done? For each state variable I look at the update step. If all the elements fall below
   // a threshold, I call myself done
   for(int i=0; i<ctx->Nstate; i++)
-    if( fabs(step[i]) > UPDATE_THRESHOLD )
+    if( fabs(step[i]) > ctx->parameters->update_threshold )
       return expectedImprovement;
 
   SAY_IF_VERBOSE( "update small enough. Done iterating!");
@@ -899,13 +890,14 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
 static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
                                           const dogleg_operatingPoint_t* after,
                                           double* trustregion,
-                                          double expectedImprovement)
+                                          double expectedImprovement,
+                                          dogleg_solverContext_t* ctx)
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
   double rho = observedImprovement / expectedImprovement;
   SAY_IF_VERBOSE( "observed/expected improvement: %.6g/%.6g. rho = %.6g",
                   observedImprovement, expectedImprovement, rho);
-  if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
   {
     vnlog_debug_data.observed_improvement = observedImprovement;
     vnlog_debug_data.rho                  = rho;
@@ -913,7 +905,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
 
 
   // adjust the trust region
-  if( rho < TRUSTREGION_DECREASE_THRESHOLD )
+  if( rho < ctx->parameters->trustregion_decrease_threshold )
   {
     SAY_IF_VERBOSE( "rho too small. decreasing trust region");
 
@@ -924,15 +916,15 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
     if( !before->didStepToEdgeOfTrustRegion )
       *trustregion = sqrt(before->updateGN_lensq);
 
-    *trustregion *= TRUSTREGION_DECREASE_FACTOR;
+    *trustregion *= ctx->parameters->trustregion_decrease_factor;
   }
-  else if (rho > TRUSTREGION_INCREASE_THRESHOLD && before->didStepToEdgeOfTrustRegion)
+  else if (rho > ctx->parameters->trustregion_increase_threshold && before->didStepToEdgeOfTrustRegion)
   {
     SAY_IF_VERBOSE( "rho large enough. increasing trust region");
 
-    *trustregion *= TRUSTREGION_INCREASE_FACTOR;
+    *trustregion *= ctx->parameters->trustregion_increase_factor;
   }
-  if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
     vnlog_debug_data.trustregion_after = *trustregion;
 
   return rho > 0.0;
@@ -940,7 +932,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
 
 static int runOptimizer(dogleg_solverContext_t* ctx)
 {
-  double trustregion = TRUSTREGION0;
+  double trustregion = ctx->parameters->trustregion0;
   int stepCount = 0;
 
   if( computeCallbackOperatingPoint(ctx->beforeStep, ctx) )
@@ -951,7 +943,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
 
   ctx->beforeStep->step_to_here_len_sq = INFINITY;
 
-  while( stepCount<MAX_ITERATIONS )
+  while( stepCount<ctx->parameters->max_iterations )
   {
     SAY_IF_VERBOSE( "================= step %d", stepCount );
 
@@ -969,21 +961,23 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
       {
-        vnlog_debug_emit_record(stepCount, 1);
+        if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+          vnlog_debug_emit_record(stepCount, 1);
         return stepCount;
       }
 
       int afterStepZeroGradient = computeCallbackOperatingPoint(ctx->afterStep, ctx);
       SAY_IF_VERBOSE( "Evaluated operating point with norm2_x %.6g", ctx->afterStep->norm2_x);
-      if(DOGLEG_DEBUG & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
         vnlog_debug_data.norm2x_after = ctx->afterStep->norm2_x;
 
       if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
-                                         expectedImprovement) )
+                                         expectedImprovement, ctx) )
       {
         SAY_IF_VERBOSE( "accepted step");
 
-        vnlog_debug_emit_record(stepCount, 1);
+        if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+          vnlog_debug_emit_record(stepCount, 1);
         stepCount++;
 
         // I accept this step, so the after-step operating point is the before-step operating point
@@ -1005,11 +999,12 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       }
 
       SAY_IF_VERBOSE( "rejected step");
-      vnlog_debug_emit_record(stepCount, 0);
+      if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+        vnlog_debug_emit_record(stepCount, 0);
 
       // This step was rejected. check if the new trust region size is small
       // enough to give up
-      if(trustregion < TRUSTREGION_THRESHOLD)
+      if(trustregion < ctx->parameters->trustregion_threshold)
       {
         SAY_IF_VERBOSE( "trust region small enough. Giving up. Done iterating!");
         return stepCount;
@@ -1019,7 +1014,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
     }
   }
 
-  if(stepCount == MAX_ITERATIONS)
+  if(stepCount == ctx->parameters->max_iterations)
       SAY_IF_VERBOSE( "Exceeded max number of iterations");
 
   return stepCount;
@@ -1163,6 +1158,9 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
                                unsigned int Nmeas, unsigned int NJnnz,
                                dogleg_callback_t* f,
                                void* cookie,
+
+                               // NULL to use the globals
+                               const dogleg_parameters2_t* parameters,
                                dogleg_solverContext_t** returnContext)
 {
   int is_sparse = NJnnz > 0;
@@ -1175,8 +1173,10 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   ctx->lambda                 = 0.0;
   ctx->Nstate                 = Nstate;
   ctx->Nmeasurements          = Nmeas;
+  ctx->parameters             = parameters ? parameters : &parameters_global;
 
-  vnlog_debug_emit_legend();
+  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+    vnlog_debug_emit_legend();
 
   if( returnContext != NULL )
     *returnContext = ctx;
@@ -1207,19 +1207,20 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   // iteration
   memcpy(p, ctx->beforeStep->p, Nstate * sizeof(double));
 
+  SAY_IF_VERBOSE( "success! took %d iterations", numsteps);
+
   if( returnContext == NULL )
     dogleg_freeContext(&ctx);
-
-  SAY_IF_VERBOSE( "success! took %d iterations", numsteps);
 
   return norm2_x;
 }
 
-double dogleg_optimize(double* p, unsigned int Nstate,
-                       unsigned int Nmeas, unsigned int NJnnz,
-                       dogleg_callback_t* f,
-                       void* cookie,
-                       dogleg_solverContext_t** returnContext)
+double dogleg_optimize2(double* p, unsigned int Nstate,
+                        unsigned int Nmeas, unsigned int NJnnz,
+                        dogleg_callback_t* f,
+                        void* cookie,
+                        const dogleg_parameters2_t* parameters,
+                        dogleg_solverContext_t** returnContext)
 {
   if( NJnnz == 0 )
   {
@@ -1228,17 +1229,42 @@ double dogleg_optimize(double* p, unsigned int Nstate,
   }
 
   return _dogleg_optimize(p, Nstate, Nmeas, NJnnz, f,
-                          cookie, returnContext);
+                          cookie,
+                          parameters,
+                          returnContext);
+}
+
+double dogleg_optimize(double* p, unsigned int Nstate,
+                       unsigned int Nmeas, unsigned int NJnnz,
+                       dogleg_callback_t* f,
+                       void* cookie,
+                       dogleg_solverContext_t** returnContext)
+{
+  return dogleg_optimize2(p,Nstate,Nmeas,NJnnz,f,cookie,
+                          NULL, // no parameters; use the globals
+                          returnContext);
 }
 
 
+double dogleg_optimize_dense2(double* p, unsigned int Nstate,
+                              unsigned int Nmeas,
+                              dogleg_callback_dense_t* f, void* cookie,
+                              const dogleg_parameters2_t* parameters,
+                              dogleg_solverContext_t** returnContext)
+{
+  return _dogleg_optimize(p, Nstate, Nmeas, 0, (dogleg_callback_t*)f,
+                          cookie,
+                          parameters,
+                          returnContext);
+}
 double dogleg_optimize_dense(double* p, unsigned int Nstate,
                              unsigned int Nmeas,
                              dogleg_callback_dense_t* f, void* cookie,
                              dogleg_solverContext_t** returnContext)
 {
-  return _dogleg_optimize(p, Nstate, Nmeas, 0, (dogleg_callback_t*)f,
-                          cookie, returnContext);
+  return dogleg_optimize_dense2(p,Nstate,Nmeas,f,cookie,
+                                NULL, // no parameters; use the globals
+                                returnContext);
 }
 
 

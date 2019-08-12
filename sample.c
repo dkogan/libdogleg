@@ -253,8 +253,9 @@ int main(int argc, char* argv[] )
   generateSimulationGrid();
   simulate();
 
-  dogleg_setDebug(debug);
-
+  dogleg_parameters2_t dogleg_parameters;
+  dogleg_getDefaultParameters(&dogleg_parameters);
+  dogleg_parameters.dogleg_debug = debug;
 
   double p[Nstate];
 
@@ -294,9 +295,13 @@ int main(int argc, char* argv[] )
 
   double optimum;
   if( is_sparse )
-    optimum = dogleg_optimize(p, Nstate, Nmeasurements, Jnnz, &optimizerCallback, NULL, NULL);
+    optimum = dogleg_optimize2(p, Nstate, Nmeasurements, Jnnz,
+                               &optimizerCallback, NULL,
+                               &dogleg_parameters, NULL);
   else
-    optimum = dogleg_optimize_dense(p, Nstate, Nmeasurements, &optimizerCallback_dense, NULL, NULL);
+    optimum = dogleg_optimize_dense2(p, Nstate, Nmeasurements,
+                                     &optimizerCallback_dense, NULL,
+                                     &dogleg_parameters, NULL);
 
   fprintf(stderr, "Done. Optimum = %f\n", optimum);
 

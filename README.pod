@@ -70,14 +70,15 @@ are minor.
 
 =head2 Main API
 
-=head3 dogleg_optimize
+=head3 dogleg_optimize2
 
-This is the main call to the library for I<sparse> Jacobians. Its declared as
+This is the main call to the library for I<sparse> Jacobians. It's declared as
 
- double dogleg_optimize(double* p, unsigned int Nstate,
-                        unsigned int Nmeas, unsigned int NJnnz,
-                        dogleg_callback_t* f, void* cookie,
-                        dogleg_solverContext_t** returnContext);
+ double dogleg_optimize2(double* p, unsigned int Nstate,
+                         unsigned int Nmeas, unsigned int NJnnz,
+                         dogleg_callback_t* f, void* cookie,
+                         const dogleg_parameters2_t* parameters,
+                         dogleg_solverContext_t** returnContext);
 
 =over
 
@@ -97,6 +98,10 @@ being solved
 
 =item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
 
+=item * C<parameters> a pointer to the set of parameters to use. Set to C<NULL>
+to use the global parameters, or call C<dogleg_optimize> instead. See the
+L<Parameters> section below for more details
+
 =item * If not C<NULL>, C<returnContext> can be used to retrieve the full
 context structure from the solver. This can be useful since this structure
 contains the latest operating point values. It also has an active
@@ -109,14 +114,25 @@ C<dogleg_freeContext> when done>.
 
 C<dogleg_optimize> returns norm2( B<x> ) at the minimum, or a negative value if an error occurred.
 
-=head3 dogleg_optimize_dense
+=head3 dogleg_optimize
+
+This is a flavor of C<dogleg_optimize2> that implicitly uses the global
+parameters. It's declared as
+
+ double dogleg_optimize(double* p, unsigned int Nstate,
+                        unsigned int Nmeas, unsigned int NJnnz,
+                        dogleg_callback_t* f, void* cookie,
+                        dogleg_solverContext_t** returnContext);
+
+=head3 dogleg_optimize_dense2
 
 This is the main call to the library for I<dense> Jacobians. Its declared as
 
- double dogleg_optimize_dense(double* p, unsigned int Nstate,
-                              unsigned int Nmeas,
-                              dogleg_callback_dense_t* f, void* cookie,
-                              dogleg_solverContext_t** returnContext);
+ double dogleg_optimize_dense2(double* p, unsigned int Nstate,
+                               unsigned int Nmeas,
+                               dogleg_callback_dense_t* f, void* cookie,
+                               const dogleg_parameters2_t* parameters,
+                               dogleg_solverContext_t** returnContext);
 
 The arguments are almost identical to those in the C<dogleg_optimize> call.
 
@@ -134,6 +150,10 @@ being solved. Note that this callback has a different type from that in C<dogleg
 
 =item * C<cookie> is an arbitrary data pointer passed untouched to C<f>
 
+=item * C<parameters> a pointer to the set of parameters to use. Set to C<NULL>
+to use the global parameters, or call C<dogleg_optimize> instead. See the
+L<Parameters> section below for more details
+
 =item * If not C<NULL>, C<returnContext> can be used to retrieve the full
 context structure from the solver. This can be useful since this structure
 contains the latest operating point values. You usually want
@@ -143,6 +163,16 @@ required to free it with C<dogleg_freeContext> when done>.
 =back
 
 C<dogleg_optimize> returns norm2( B<x> ) at the minimum, or a negative value if an error occurred.
+
+=head3 dogleg_optimize_dense
+
+This is a flavor of C<dogleg_optimize_dense2> that implicitly uses the global
+parameters. It's declared as
+
+ double dogleg_optimize_dense(double* p, unsigned int Nstate,
+                              unsigned int Nmeas,
+                              dogleg_callback_dense_t* f, void* cookie,
+                              dogleg_solverContext_t** returnContext);
 
 =head3 dogleg_freeContext
 
@@ -384,10 +414,19 @@ computed at every step and are thus always valid.
 
 =head2 Parameters
 
-It is not required to call any of these, but it's highly recommended to set the initial trust-region
-size and the termination thresholds to match the problem being solved. Furthermore, it's highly
-recommended for the problem being solved to be scaled so that every state variable affects the
-objective norm2( B<x> ) equally. This makes this method's concept of "trust region" much more
+The optimization is controlled by several parameters. These can be set globally
+for I<all> callers of C<libdogleg> in a process using the C<dogleg_set....()>
+functions. Those global values are used by C<dogleg_optimize> and
+C<dogleg_optimize_dense>. Or these can be specified independently for each
+invocation by passing a C<parameters> argument to C<dogleg_optimize2> or
+C<dogleg_optimize_dense2>. The latter is recommended because multiple instances
+of libdogleg in a single application would no longer conflict.
+
+It is not required to set any of these, but it's highly recommended to set the
+initial trust-region size and the termination thresholds to match the problem
+being solved. Furthermore, it's highly recommended for the problem being solved
+to be scaled so that every state variable affects the objective norm2( B<x> )
+equally. This makes this method's concept of "trust region" much more
 well-defined and makes the termination criteria work correctly.
 
 =head3 dogleg_setMaxIterations

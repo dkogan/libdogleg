@@ -54,6 +54,34 @@ typedef struct
 
 } dogleg_operatingPoint_t;
 
+// The newer APIs ( dogleg_...2() ) take a dogleg_parameters2_t argument for
+// their settings, while the older ones use a global set of parameters specified
+// with dogleg_set_...(). This global-parameters approach doesn't work if we
+// have multiple users of libdogleg in the same application
+typedef struct
+{
+  int max_iterations;
+  int dogleg_debug;
+
+  // it is cheap to reject a too-large trust region, so I start with something
+  // "large". The solver will quickly move down to something reasonable. Only the
+  // user really knows if this is "large" or not, so they should change this via
+  // the API
+  double trustregion0;
+
+  // These are probably OK to leave alone. Tweaking them can maybe result in
+  // slightly faster convergence
+  double trustregion_decrease_factor;
+  double trustregion_decrease_threshold;
+  double trustregion_increase_factor;
+  double trustregion_increase_threshold;
+
+  // The termination thresholds. Documented in the header
+  double Jt_x_threshold;
+  double update_threshold;
+  double trustregion_threshold;
+} dogleg_parameters2_t;
+
 // solver context. This has all the internal state of the solver
 typedef struct
 {
@@ -93,59 +121,15 @@ typedef struct
   // Are we using sparse math (cholmod)?
   int                      is_sparse;
   int                      Nstate, Nmeasurements;
+
+  const dogleg_parameters2_t* parameters;
+
 } dogleg_solverContext_t;
 
 
-// The main optimization function. Initial estimate of the solution passed in p,
-// final optimized solution returned in p. p has Nstate variables. There are
-// Nmeas measurements, the jacobian matrix has NJnnz non-zero entries.
-//
-// The evaluation function is given in the callback f; this function is passed
-// the given cookie
-//
-// If we want to get the full solver state when we're done, a non-NULL
-// returnContext pointer can be given. If this is done then THE USER IS
-// RESPONSIBLE FOR FREEING ITS MEMORY WITH dogleg_freeContext()
-double dogleg_optimize(double* p, unsigned int Nstate,
-                       unsigned int Nmeas, unsigned int NJnnz,
-                       dogleg_callback_t* f, void* cookie,
-                       dogleg_solverContext_t** returnContext);
+// Fills in the given structure with the default parameter set
+void dogleg_getDefaultParameters(dogleg_parameters2_t* parameters);
 
-// Main optimization function if we're using dense linear algebra. The arguments
-// are very similar to the sparse version: dogleg_optimize()
-double dogleg_optimize_dense(double* p, unsigned int Nstate,
-                             unsigned int Nmeas,
-                             dogleg_callback_dense_t* f, void* cookie,
-                             dogleg_solverContext_t** returnContext);
-
-// Compute the cholesky decomposition of JtJ. This function is only exposed if
-// you need to touch libdogleg internals via returnContext. Sometimes after
-// computing an optimization you want to do stuff with the factorization of JtJ,
-// and this call ensures that the factorization is available. Most people don't
-// need this function. If the comment wasn't clear, you don't need this
-// function.
-void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
-
-// Generates a plain text table that contains gradient checks. This table can be
-// easily parsed with "vnlog" tools
-void dogleg_testGradient(unsigned int var, const double* p0,
-                         unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
-                         dogleg_callback_t* f, void* cookie);
-void dogleg_testGradient_dense(unsigned int var, const double* p0,
-                               unsigned int Nstate, unsigned int Nmeas,
-                               dogleg_callback_dense_t* f, void* cookie);
-
-
-// If we want to get the full solver state when we're done optimizing, we can
-// pass a non-NULL returnContext pointer to dogleg_optimize(). If we do this,
-// then the user MUST call dogleg_freeContext() to deallocate the pointer when
-// the USER is done
-void dogleg_freeContext(dogleg_solverContext_t** ctx);
-
-
-////////////////////////////////////////////////////////////////
-// solver parameters
-////////////////////////////////////////////////////////////////
 void dogleg_setMaxIterations(int n);
 void dogleg_setTrustregionUpdateParameters(double downFactor, double downThreshold,
                                            double upFactor,   double upThreshold);
@@ -188,6 +172,64 @@ void dogleg_setInitialTrustregion(double t);
 //
 // to leave a particular threshold alone, use a value <= 0 here
 void dogleg_setThresholds(double Jt_x, double update, double trustregion);
+
+
+// The main optimization function. Initial estimate of the solution passed in p,
+// final optimized solution returned in p. p has Nstate variables. There are
+// Nmeas measurements, the jacobian matrix has NJnnz non-zero entries.
+//
+// The evaluation function is given in the callback f; this function is passed
+// the given cookie
+//
+// If we want to get the full solver state when we're done, a non-NULL
+// returnContext pointer can be given. If this is done then THE USER IS
+// RESPONSIBLE FOR FREEING ITS MEMORY WITH dogleg_freeContext()
+double dogleg_optimize(double* p, unsigned int Nstate,
+                       unsigned int Nmeas, unsigned int NJnnz,
+                       dogleg_callback_t* f, void* cookie,
+                       dogleg_solverContext_t** returnContext);
+double dogleg_optimize2(double* p, unsigned int Nstate,
+                        unsigned int Nmeas, unsigned int NJnnz,
+                        dogleg_callback_t* f, void* cookie,
+                        const dogleg_parameters2_t* parameters,
+                        dogleg_solverContext_t** returnContext);
+
+// Main optimization function if we're using dense linear algebra. The arguments
+// are very similar to the sparse version: dogleg_optimize()
+double dogleg_optimize_dense(double* p, unsigned int Nstate,
+                             unsigned int Nmeas,
+                             dogleg_callback_dense_t* f, void* cookie,
+                             dogleg_solverContext_t** returnContext);
+double dogleg_optimize_dense2(double* p, unsigned int Nstate,
+                              unsigned int Nmeas,
+                              dogleg_callback_dense_t* f, void* cookie,
+                              const dogleg_parameters2_t* parameters,
+                              dogleg_solverContext_t** returnContext);
+
+// Compute the cholesky decomposition of JtJ. This function is only exposed if
+// you need to touch libdogleg internals via returnContext. Sometimes after
+// computing an optimization you want to do stuff with the factorization of JtJ,
+// and this call ensures that the factorization is available. Most people don't
+// need this function. If the comment wasn't clear, you don't need this
+// function.
+void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
+
+// Generates a plain text table that contains gradient checks. This table can be
+// easily parsed with "vnlog" tools
+void dogleg_testGradient(unsigned int var, const double* p0,
+                         unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
+                         dogleg_callback_t* f, void* cookie);
+void dogleg_testGradient_dense(unsigned int var, const double* p0,
+                               unsigned int Nstate, unsigned int Nmeas,
+                               dogleg_callback_dense_t* f, void* cookie);
+
+
+// If we want to get the full solver state when we're done optimizing, we can
+// pass a non-NULL returnContext pointer to dogleg_optimize(). If we do this,
+// then the user MUST call dogleg_freeContext() to deallocate the pointer when
+// the USER is done
+void dogleg_freeContext(dogleg_solverContext_t** ctx);
+
 
 // Computes outlierness factors. This function is experimental, and subject to
 // change.
