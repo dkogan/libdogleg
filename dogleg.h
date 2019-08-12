@@ -244,10 +244,10 @@ void dogleg_reportOutliers( double (getConfidence)(int i_feature_exclude),
                             dogleg_operatingPoint_t* point,
                             dogleg_solverContext_t* ctx);
 
-double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
-                                                    int istateActive,
-                                                    int NstateActive,
-                                                    int featureSize,
-                                                    int NoutlierFeatures,
+double dogleg_getOutliernessTrace_newFeature_sparse(const double*            JqueryFeature,
+                                                    int                      istateActive,
+                                                    int                      NstateActive,
+                                                    int                      featureSize,
+                                                    int                      NoutlierFeatures,
                                                     dogleg_operatingPoint_t* point,
-                                                    dogleg_solverContext_t* ctx);
+                                                    dogleg_solverContext_t*  ctx);

@@ -2151,13 +2151,13 @@ bool dogleg_getOutliernessFactors( // output
   return result;
 }
 
-double dogleg_getOutliernessTrace_newFeature_sparse(const double* JqueryFeature,
-                                                    int istateActive,
-                                                    int NstateActive,
-                                                    int featureSize,
-                                                    int NoutlierFeatures,
+double dogleg_getOutliernessTrace_newFeature_sparse(const double*            JqueryFeature,
+                                                    int                      istateActive,
+                                                    int                      NstateActive,
+                                                    int                      featureSize,
+                                                    int                      NoutlierFeatures,
                                                     dogleg_operatingPoint_t* point,
-                                                    dogleg_solverContext_t* ctx)
+                                                    dogleg_solverContext_t*  ctx)
 {
   /*
     See the big comment above for a description
