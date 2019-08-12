@@ -65,7 +65,7 @@ typedef enum { VNLOG_DEBUG_STEP_TYPE_LIST(VNLOG_DEBUG_STEP_TYPE_NAME_COMMA)
   _(double,                  rho,                   INFINITY)      \
   _(double,                  trustregion_before,    INFINITY)      \
   _(double,                  trustregion_after,     INFINITY)
-struct vnlog_debug_data_t
+static struct vnlog_debug_data_t
 {
 #define VNLOG_DEBUG_DECLARE_FIELD(type, name, initialvalue) type name;
   VNLOG_DEBUG_FIELDS(VNLOG_DEBUG_DECLARE_FIELD)
