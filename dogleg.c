@@ -2425,7 +2425,7 @@ bool dogleg_markOutliers(// output, input
     // is acceptable
     double confidence0 = getConfidence(-1);
     if( confidence0 < 0.0 )
-        return false;
+        goto done;
 
     SAY_IF_VERBOSE("Initial confidence: %g", confidence0);
 
