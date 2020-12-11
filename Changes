@@ -1,3 +1,13 @@
+libdogleg (0.15.4) unstable; urgency=medium
+
+  * verbose output has a mode to output vnlog
+  * defragmented malloc() calls
+  * dogleg_operatingPoint_t stores the step vector we took to get here
+  * Added dogleg_optimize2() and dogleg_optimize_dense2() entry points
+    that use local parameters
+
+ -- Dima Kogan <dkogan@debian.org>  Fri, 11 Dec 2020 15:37:26 -0800
+
 libdogleg (0.15.1)
 
   * Various updates to the experimental outlier-rejection logic. These
