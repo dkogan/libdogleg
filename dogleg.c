@@ -8,11 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include <float.h>
-#ifdef __APPLE__
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif
+#include <stdlib.h>
 #include "dogleg.h"
 
 #if (CHOLMOD_VERSION > (CHOLMOD_VER_CODE(2,2))) && (CHOLMOD_VERSION < (CHOLMOD_VER_CODE(4,0)))
