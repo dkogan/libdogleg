@@ -16,7 +16,7 @@ BIN_SOURCES += \
 DIST_INCLUDE += \
   dogleg.h
 
-LDLIBS += -lcholmod -lsuitesparseconfig -llapack
+LDLIBS += -lcholmod -llapack
 LDLIBS += -lm
 
 CFLAGS += -Wall -Wextra -I/usr/include/suitesparse
