@@ -1,4 +1,13 @@
-libdogleg (0.15.4) unstable; urgency=medium
+libdogleg (0.16)
+
+  * The build system has been consolidated, and now uses the mrbuild
+    project. This can be installed as a dependency, or downloaded locally.
+    Type "make" for instructions
+  * Building against the new suitesparse is supported
+
+ -- Dima Kogan <dkogan@debian.org>  Mon, 17 Jul 2023 09:21:26 -0700
+
+libdogleg (0.15.4)
 
   * verbose output has a mode to output vnlog
   * defragmented malloc() calls
