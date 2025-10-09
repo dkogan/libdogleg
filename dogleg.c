@@ -820,7 +820,7 @@ static bool takeStepFrom(// out
                     pointFrom->updateCauchy,
                     trustregion / sqrt(pointFrom->norm2_updateCauchy),
                     ctx->Nstate);
-    pointFrom->didStepToEdgeOfTrustRegion = 1;
+    pointFrom->didStepToEdgeOfTrustRegion = true;
   }
   else
   {
@@ -845,7 +845,7 @@ static bool takeStepFrom(// out
       memcpy( step,
               ctx->is_sparse ? pointFrom->updateGN_cholmoddense->x : pointFrom->updateGN_dense,
               ctx->Nstate * sizeof(step[0]) );
-      pointFrom->didStepToEdgeOfTrustRegion = 0;
+      pointFrom->didStepToEdgeOfTrustRegion = false;
     }
     else
     {
@@ -859,7 +859,7 @@ static bool takeStepFrom(// out
                                     pointFrom, trustregion, ctx))
         return false;
 
-      pointFrom->didStepToEdgeOfTrustRegion = 1;
+      pointFrom->didStepToEdgeOfTrustRegion = true;
       if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
       {
         vnlog_debug_data.step_type = STEPTYPE_INTERPOLATED;

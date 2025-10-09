@@ -67,14 +67,17 @@ typedef struct
   // variables since nobody is using them
   union
   {
-    int dummy[2];
+    int dummy[3];
     struct {
       bool have_updateCauchy               : 1; // and the norm2
       bool have_updateGN_and_factorization : 1; // and the norm2 and the factorization
+      bool have_x                          : 1; // and the norm2
+      bool have_J                          : 1; // Jt or J_dense
+      bool have_Jt_x                       : 1;
+      bool have_step_to_here               : 1; // and the norm2
+      bool didStepToEdgeOfTrustRegion      : 1;
     };
   };
-
-  int didStepToEdgeOfTrustRegion;
 
   double* step_to_here;
   double  norm2_step_to_here;
