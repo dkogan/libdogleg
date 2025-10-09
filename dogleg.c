@@ -496,7 +496,7 @@ int dpptrs_(char* uplo, int* n, int* nrhs,
 void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->have.updateGN)
+  if(point->have.updateGN_and_factorization)
     return;
 
   if( ctx->is_sparse )
@@ -600,7 +600,7 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->have.updateGN)
+  if(!point->have.updateGN_and_factorization)
   {
     dogleg_computeJtJfactorization(point, ctx);
 
@@ -644,7 +644,7 @@ static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     }
 
     SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->norm2_updateGN));
-    point->have.updateGN = 1;
+    point->have.updateGN_and_factorization = 1;
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
@@ -743,8 +743,8 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
 
   // I just got a new operating point, so the current update vectors aren't
   // valid anymore, and should be recomputed, as needed
-  point->have.updateCauchy = 0;
-  point->have.updateGN     = 0;
+  point->have.updateCauchy               = 0;
+  point->have.updateGN_and_factorization = 0;
 
   // compute the 2-norm of the current error vector
   // At some point this should be changed to use the call from libminimath
@@ -1103,8 +1103,8 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
   }
 
   // vectors don't have any valid data yet
-  point->have.updateCauchy = 0;
-  point->have.updateGN     = 0;
+  point->have.updateCauchy               = 0;
+  point->have.updateGN_and_factorization = 0;
 
   return point;
 }
