@@ -683,6 +683,11 @@ static bool computeInterpolatedUpdate(double*                  update_dogleg,
   double        norm2a = point->norm2_updateCauchy;
   const double* a      = point->updateCauchy;
   const double* b      = ctx->is_sparse ? point->updateGN_cholmoddense->x : point->updateGN_dense;
+  if(b == NULL)
+  {
+    SAY("ERROR: In %s() updateGN should already have been computed. This is a bug", __func__);
+    return false;
+  }
 
   double l2    = 0.0;
   double neg_c = 0.0;
@@ -825,7 +830,7 @@ static bool takeStepFrom(// out
     // trust region that lies on a straight line between the Cauchy point and
     // the Gauss-Newton solution, and use that. This is the heart of Powell's
     // dog-leg algorithm.
-    compute_updateGN(pointFrom, ctx);
+    compute_updateGN(pointFrom, ctx); // I'm calling updateGN_at_point() below, which assumes this
     if(pointFrom->norm2_updateGN <= trustregion*trustregion)
     {
       SAY_IF_VERBOSE( "taking GN step");
@@ -900,13 +905,16 @@ static bool takeStepFrom(// out
 
 
 // I have a candidate step. I adjust the trustregion accordingly, and also
-// report whether this step should be accepted (0 == rejected, otherwise
-// accepted)
-static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
-                                          const dogleg_operatingPoint_t* after,
-                                          double* trustregion,
-                                          double expectedImprovement,
-                                          dogleg_solverContext_t* ctx)
+// report *accepted to indicate if this step should be accepted. Returns false
+// on error
+static bool evaluateStep_adjustTrustRegion(// out
+                                           bool* accept,
+                                           double* trustregion,
+                                           // in
+                                           const dogleg_operatingPoint_t* before,
+                                           const dogleg_operatingPoint_t* after,
+                                           const double expectedImprovement,
+                                           dogleg_solverContext_t* ctx)
 {
   double observedImprovement = before->norm2_x - after->norm2_x;
   double rho = observedImprovement / expectedImprovement;
@@ -929,7 +937,15 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
     // constant factor. Otherwise, drop the trustregion to attempted step size
     // first
     if( !before->didStepToEdgeOfTrustRegion )
+    {
+      if(!before->have.updateGN_and_factorization)
+      {
+        SAY("ERROR: In %s() updateGN should already have been computed. This is a bug", __func__);
+        return false;
+      }
+
       *trustregion = sqrt(before->norm2_updateGN);
+    }
 
     *trustregion *= ctx->parameters->trustregion_decrease_factor;
   }
@@ -942,7 +958,8 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
   if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
     vnlog_debug_data.trustregion_after = *trustregion;
 
-  return rho > 0.0;
+  *accept = (rho > 0.0);
+  return true;
 }
 
 // returns the step count or <0 on error
@@ -992,8 +1009,17 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
         vnlog_debug_data.norm2x_after = ctx->afterStep->norm2_x;
 
-      if( evaluateStep_adjustTrustRegion(ctx->beforeStep, ctx->afterStep, &trustregion,
-                                         expectedImprovement, ctx) )
+      bool accept_step;
+      if(!evaluateStep_adjustTrustRegion(// out
+                                         &accept_step,
+                                         &trustregion,
+                                         // in
+                                         ctx->beforeStep,
+                                         ctx->afterStep,
+                                         expectedImprovement, ctx))
+        return -1;
+
+      if(accept_step)
       {
         SAY_IF_VERBOSE( "accepted step");
 
