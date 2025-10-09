@@ -322,10 +322,12 @@ static double getGrad_dense(unsigned int var, int meas, const double* J, int Nst
 static
 void _dogleg_testGradient(unsigned int var, const double* p0,
                           unsigned int Nstate, unsigned int Nmeas, unsigned int NJnnz,
-                          dogleg_callback_t* f, void* cookie)
+// exactly one of these should be non-NULL
+                          dogleg_callback_t*                f,
+                          dogleg_callback_dense_t*          f_dense,
+                          dogleg_callback_dense_products_t* f_dense_products,
+                          void* cookie)
 {
-  int is_sparse = NJnnz > 0;
-
   double* x0 = malloc(Nmeas  * sizeof(double));
   double* x  = malloc(Nmeas  * sizeof(double));
   double* p  = malloc(Nstate * sizeof(double));
@@ -346,7 +348,7 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   // This is a plain text table, that can be easily parsed with "vnlog" tools
   printf("# ivar imeasurement gradient_reported gradient_observed error error_relative\n");
 
-  if( is_sparse )
+  if(f != NULL)
   {
     if( !cholmod_start(&_cholmod_common) )
     {
@@ -373,17 +375,27 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
     (*f)(p, x,  Jt,  cookie);
     p[var] -= GRADTEST_DELTA/2.0;
   }
-  else
+  else if(f_dense != NULL)
   {
     J_dense  = malloc( Nmeas * Nstate * sizeof(J_dense[0]) );
     J_dense0 = malloc( Nmeas * Nstate * sizeof(J_dense[0]) );
 
-    dogleg_callback_dense_t* f_dense = (dogleg_callback_dense_t*)f;
     p[var] -= GRADTEST_DELTA/2.0;
     (*f_dense)(p, x0, J_dense0, cookie);
     p[var] += GRADTEST_DELTA;
     (*f_dense)(p, x,  J_dense,  cookie);
     p[var] -= GRADTEST_DELTA/2.0;
+  }
+  else if(f_dense_products != NULL)
+  {
+    // d(Jtx)/dp ~ Jt dx/dp ~ JtJ
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+  }
+  else
+  {
+    SAY("ERROR: exactly one of (f,f_dense,f_dense_products) must be non-NULL");
+    exit(1);
   }
 
 
@@ -392,11 +404,15 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
     // estimated gradients at the midpoint between x and x0
     double g_observed = (x[i] - x0[i]) / GRADTEST_DELTA;
     double g_reported;
-    if( is_sparse )
+    if(f != NULL)
       g_reported = (getGrad(var, i, Jt0) + getGrad(var, i, Jt)) / 2.0;
-    else
+    else if(f_dense != NULL)
       g_reported = (getGrad_dense(var, i, J_dense0, Nstate) + getGrad_dense(var, i, J_dense, Nstate)) / 2.0;
-
+    else
+    {
+      fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+      exit(1);
+    }
     double g_sum_abs = fabs(g_reported) + fabs(g_observed);
     double g_abs_err = fabs(g_reported - g_observed);
 
@@ -406,13 +422,13 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
             g_sum_abs == 0.0 ? 0.0 : (g_abs_err / ( g_sum_abs / 2.0 )));
   }
 
-  if( is_sparse )
+  if(f != NULL)
   {
     cholmod_free_sparse(&Jt,  &_cholmod_common);
     cholmod_free_sparse(&Jt0, &_cholmod_common);
     cholmod_finish(&_cholmod_common);
   }
-  else
+  else if(f_dense != NULL)
   {
     free(J_dense);
     free(J_dense0);
@@ -431,13 +447,25 @@ void dogleg_testGradient(unsigned int var, const double* p0,
     SAY( "I must have NJnnz > 0, instead I have %d", NJnnz);
     return;
   }
-  return _dogleg_testGradient(var, p0, Nstate, Nmeas, NJnnz, f, cookie);
+  return _dogleg_testGradient(var, p0, Nstate, Nmeas, NJnnz,
+                              f, NULL, NULL,
+                              cookie);
 }
 void dogleg_testGradient_dense(unsigned int var, const double* p0,
                                unsigned int Nstate, unsigned int Nmeas,
                                dogleg_callback_dense_t* f, void* cookie)
 {
-  return _dogleg_testGradient(var, p0, Nstate, Nmeas, 0, (dogleg_callback_t*)f, cookie);
+  return _dogleg_testGradient(var, p0, Nstate, Nmeas, 0,
+                              NULL, f, NULL,
+                              cookie);
+}
+void dogleg_testGradient_dense_products(unsigned int var, const double* p0,
+                                        unsigned int Nstate, unsigned int Nmeas,
+                                        dogleg_callback_dense_products_t* f, void* cookie)
+{
+  return _dogleg_testGradient(var, p0, Nstate, Nmeas, 0,
+                              NULL, NULL, f,
+                              cookie);
 }
 
 
@@ -474,8 +502,9 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
     }
     double norm2_Jt_x = norm2(point->Jt_x, ctx->Nstate);
     double norm2_J_Jt_x;
-    if(ctx->is_sparse)
+    switch(ctx->solve_type)
     {
+    case DOGLEG_SPARSE:
         if(!point->have_J)
         {
           SAY("%s() needs J, but it isn't available", __func__);
@@ -483,9 +512,9 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
         }
         norm2_J_Jt_x =
             norm2_mul_spmatrix_t_densevector(point->Jt, point->Jt_x);
-    }
-    else
-    {
+        break;
+
+    case DOGLEG_DENSE:
         if(!point->have_J)
         {
           SAY("%s() needs J, but it isn't available", __func__);
@@ -493,6 +522,18 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
         }
         norm2_J_Jt_x =
             norm2_mul_matrix_vector(point->J_dense, point->Jt_x, ctx->Nmeasurements, ctx->Nstate);
+        break;
+
+    case DOGLEG_DENSE_PRODUCTS:
+    default:
+        if(!point->have_JtJ)
+        {
+          SAY("%s() needs JtJ, but it isn't available", __func__);
+          return false;
+        }
+        fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+        exit(1);
+        return false;
     }
 
     double k = -norm2_Jt_x / norm2_J_Jt_x;
@@ -530,8 +571,8 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
     return false;
   }
 
- if( ctx->is_sparse )
- {
+  if( ctx->solve_type == DOGLEG_SPARSE )
+  {
     // I'm assuming the pattern of zeros will remain the same throughout, so I
     // analyze only once
     if(ctx->factorization == NULL)
@@ -563,7 +604,7 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
                       ctx->factorization->minor, ctx->Nstate, ctx->lambda);
     }
   }
-  else
+  else if( ctx->solve_type == DOGLEG_DENSE )
   {
     if(ctx->factorization_dense == NULL)
     {
@@ -626,6 +667,11 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       SAY_IF_VERBOSE( "singular JtJ. Adding %g I from now on", ctx->lambda);
     }
   }
+  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+  {
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+  }
   return true;
 }
 
@@ -646,7 +692,7 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     // try to factorize the matrix directly. If it's singular, add a small
     // constant to the diagonal. This constant gets larger if we keep being
     // singular
-    if( ctx->is_sparse )
+    if( ctx->solve_type == DOGLEG_SPARSE )
     {
       // solve JtJ*updateGN = Jt*x. Gauss-Newton step is then -updateGN
       cholmod_dense Jt_x_dense = {.nrow  = ctx->Nstate,
@@ -674,7 +720,7 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
 
       point->norm2_updateGN = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
     }
-    else
+    else if( ctx->solve_type == DOGLEG_DENSE )
     {
       memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
       int info;
@@ -685,6 +731,11 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
                  ctx->Nstate); // should be more efficient than this later
 
       point->norm2_updateGN = norm2(point->updateGN_dense, ctx->Nstate);
+    }
+    else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+    {
+      fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+      exit(1);
     }
 
     SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->norm2_updateGN));
@@ -703,10 +754,17 @@ static const double* updateGN_at_point(const dogleg_operatingPoint_t* point,
   if(!point->have_updateGN_and_factorization)
     return NULL;
 
-  if(ctx->is_sparse)
+  switch(ctx->solve_type)
+  {
+  case DOGLEG_SPARSE:
       return point->updateGN_cholmoddense->x;
-  else
+  case DOGLEG_DENSE:
       return point->updateGN_dense;
+  case DOGLEG_DENSE_PRODUCTS:
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+  }
+  return NULL;
 }
 
 static bool computeInterpolatedUpdate(double*                  update_dogleg,
@@ -789,7 +847,10 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
 {
   point->norm2_x = -1.; // the unknown default; to make any bugs obvious
 
-  if( ctx->is_sparse )
+  // all the have_... bits are false
+  memset((char*)point->dummy_bits, 0, sizeof(point->dummy_bits));
+
+  if( ctx->solve_type == DOGLEG_SPARSE )
   {
     (*ctx->f)(// in
               point->p,
@@ -809,7 +870,7 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
     point->have_Jtx = true;
 
   }
-  else
+  else if( ctx->solve_type == DOGLEG_DENSE )
   {
     (*ctx->f_dense)(// in
                     point->p,
@@ -829,11 +890,24 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
     point->have_J   = true;
     point->have_Jtx = true;
   }
+  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+  {
 
-  // I just got a new operating point, so the current update vectors aren't
-  // valid anymore, and should be recomputed, as needed
-  point->have_updateCauchy               = false;
-  point->have_updateGN_and_factorization = false;
+    // (*ctx->f_dense_products)(// in
+    //                          point->p,
+    //                          // out
+    //                          &point->norm2_x,
+    //                          point->Jt_x,
+    //                          point->JtJ_dense,
+    //                          // context
+    //                          ctx->cookie);
+
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+
+    // we do NOT have x or J
+    point->have_Jtx   = true;
+  }
 
   // If the largest absolute gradient element is smaller than the threshold,
   // we can stop iterating. This is equivalent to the inf-norm
@@ -854,7 +928,7 @@ static bool computeExpectedImprovement(// out
   // My error function is F=norm2(f(p + step)). F(0) - F(step) =
   // = norm2(x) - norm2(x + J*step) = -2*inner(x,J*step) - norm2(J*step)
   // = -2*inner(Jt_x,step) - norm2(J*step)
-  if( ctx->is_sparse )
+  if( ctx->solve_type == DOGLEG_SPARSE )
   {
     if(!point->have_J)
     {
@@ -871,7 +945,7 @@ static bool computeExpectedImprovement(// out
       - norm2_mul_spmatrix_t_densevector(point->Jt, step);
     return true;
   }
-  else
+  else if( ctx->solve_type == DOGLEG_DENSE )
   {
     if(!point->have_J)
     {
@@ -888,6 +962,23 @@ static bool computeExpectedImprovement(// out
       - norm2_mul_matrix_vector(point->J_dense, step, ctx->Nmeasurements, ctx->Nstate);
     return true;
   }
+  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+  {
+    ///// something like this?
+    // if(!point->have_J)
+    // {
+    //   SAY("%s() needs J, but it isn't available", __func__);
+    //   return -1.0;
+    // }
+    // if(!point->have_Jtx)
+    // {
+    //   SAY("%s() needs Jtx, but it isn't available", __func__);
+    //   return false;
+    // }
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+  }
+  return false;
 }
 
 
@@ -1195,83 +1286,93 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
 }
 
 static
-dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
-                                             unsigned int NJnnz,
-                                             cholmod_common* common)
+dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
+                                             dogleg_solverContext_t* ctx)
 {
-  int is_sparse = NJnnz > 0;
+  const bool is_sparse        = ctx->solve_type == DOGLEG_SPARSE;
+  const bool is_dense         = ctx->solve_type == DOGLEG_DENSE;
+  const bool is_dense_product = ctx->solve_type == DOGLEG_DENSE_PRODUCTS;
 
   dogleg_operatingPoint_t* point = malloc(sizeof(dogleg_operatingPoint_t));
   ASSERT(point != NULL);
 
+  point->p              = NULL;
+  point->x              = NULL;
+  point->Jt_x           = NULL;
+  point->updateCauchy   = NULL;
+  point->step_to_here   = NULL;
+  point->J_dense        = NULL;
+  point->updateGN_dense = NULL;
 
-  int Npool =
-    Nstate          +
-    numMeasurements +
-    Nstate          +
-    Nstate          +
-    Nstate;
-  if(!is_sparse)
-    Npool += numMeasurements*Nstate + Nstate;
+  const int Npool =
+    ctx->Nstate                                        + // p
+    (is_dense_product ? 0 : ctx->Nmeasurements)        + // x
+    ctx->Nstate                                        + // Jtx
+    ctx->Nstate                                        + // updateCauchy
+    ctx->Nstate                                        + // step_to_here
+    (is_dense  ? (ctx->Nmeasurements*ctx->Nstate) : 0) + // J_dense
+    (is_sparse ? 0 : ctx->Nstate);                       // updateGN_dense
+
 
   double* pool = malloc( Npool * sizeof(double) );
   ASSERT( pool != NULL );
 
-  point->p            = &pool[0];
-  point->x            = &pool[Nstate];
-  point->Jt_x         = &pool[Nstate +
-                              numMeasurements];
-  point->updateCauchy = &pool[Nstate +
-                              numMeasurements +
-                              Nstate];
-  point->step_to_here = &pool[Nstate +
-                              numMeasurements +
-                              Nstate +
-                              Nstate];
+  int i0 = 0;
 
-  if( is_sparse )
+  // freeOperatingPoint() below assumes that p == pool
+  point->p = &pool[i0];
+  i0 += ctx->Nstate;
+
+  if(!is_dense_product)
   {
-    point->Jt = cholmod_allocate_sparse(Nstate, numMeasurements, NJnnz,
+    point->x          = &pool[i0];
+    i0 += ctx->Nmeasurements;
+  }
+
+  point->Jt_x         = &pool[i0];
+  i0 += ctx->Nstate;
+
+  point->updateCauchy = &pool[i0];
+  i0 += ctx->Nstate;
+
+  point->step_to_here = &pool[i0];
+  i0 += ctx->Nstate;
+
+  if(is_sparse)
+  {
+    point->Jt = cholmod_allocate_sparse(ctx->Nstate, ctx->Nmeasurements, NJnnz,
                                         1, // sorted
                                         1, // packed,
                                         0, // NOT symmetric
                                         CHOLMOD_REAL,
-                                        common);
+                                        &ctx->common);
     ASSERT(point->Jt != NULL);
     point->updateGN_cholmoddense = NULL; // This will be allocated as it is used
   }
   else
   {
-    point->J_dense = &pool[Nstate +
-                           numMeasurements +
-                           Nstate +
-                           Nstate +
-                           Nstate];
-    point->updateGN_dense = &pool[Nstate +
-                                  numMeasurements +
-                                  Nstate +
-                                  Nstate +
-                                  Nstate +
-                                  numMeasurements * Nstate];
-  }
+    if(is_dense)
+    {
+      point->J_dense = &pool[i0];
+      i0 += ctx->Nmeasurements * ctx->Nstate;
+    }
 
-  // vectors don't have any valid data yet
-  point->have_x                          = false;
-  point->have_updateCauchy               = false;
-  point->have_updateGN_and_factorization = false;
+    point->updateGN_dense = &pool[i0];
+    i0 += ctx->Nstate;
+  }
+  ASSERT(i0 == Npool);
 
   return point;
 }
 
 static void freeOperatingPoint(dogleg_operatingPoint_t** point, cholmod_common* common)
 {
-  // MUST match allocOperatingPoint(). It does a single malloc() and stores the
-  // pointer into p
+  // MUST match allocOperatingPoint()
+
+  // I assume that allocOperatingPoint() put the malloc() result into p
   free((*point)->p);
 
-  int is_sparse = common != NULL;
-
-  if( is_sparse )
+  if(common != NULL)
   {
     cholmod_free_sparse(&(*point)->Jt,   common);
 
@@ -1315,10 +1416,12 @@ static void set_cholmod_options(cholmod_common* cc)
 
 void dogleg_freeContext(dogleg_solverContext_t** ctx)
 {
-  freeOperatingPoint(&(*ctx)->beforeStep, (*ctx)->is_sparse ? &(*ctx)->common : NULL);
-  freeOperatingPoint(&(*ctx)->afterStep,  (*ctx)->is_sparse ? &(*ctx)->common : NULL);
+  const bool is_sparse = ((*ctx)->solve_type == DOGLEG_SPARSE);
 
-  if( (*ctx)->is_sparse )
+  freeOperatingPoint(&(*ctx)->beforeStep, is_sparse ? &(*ctx)->common : NULL);
+  freeOperatingPoint(&(*ctx)->afterStep,  is_sparse ? &(*ctx)->common : NULL);
+
+  if( is_sparse )
   {
     if((*ctx)->factorization != NULL)
       cholmod_free_factor (&(*ctx)->factorization, &(*ctx)->common);
@@ -1333,7 +1436,10 @@ void dogleg_freeContext(dogleg_solverContext_t** ctx)
 
 static double _dogleg_optimize(double* p, unsigned int Nstate,
                                unsigned int Nmeas, unsigned int NJnnz,
-                               dogleg_callback_t* f,
+                               // exactly one of these should be non-NULL
+                               dogleg_callback_t*                f,
+                               dogleg_callback_dense_t*          f_dense,
+                               dogleg_callback_dense_products_t* f_dense_products,
                                void* cookie,
 
                                // NULL to use the globals
@@ -1341,14 +1447,49 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
                                dogleg_solverContext_t** returnContext)
 {
   dogleg_solverContext_t* ctx = malloc(sizeof(dogleg_solverContext_t));
-  ctx->f                      = f;
+
+  if(f != NULL)
+  {
+      ctx->solve_type = DOGLEG_SPARSE;
+      ctx->f          = f;
+      if(NJnnz <= 0)
+      {
+        SAY("ERROR: sparse solves must have NJnnz>0");
+        return -1.0;
+      }
+  }
+  else if(f_dense != NULL)
+  {
+      ctx->solve_type = DOGLEG_DENSE;
+      ctx->f_dense    = f_dense;
+      if(NJnnz > 0)
+      {
+        SAY("ERROR: dense solves must have NJnnz==0");
+        return -1.0;
+      }
+  }
+  else if(f_dense_products != NULL)
+  {
+      ctx->solve_type = DOGLEG_DENSE_PRODUCTS;
+      ctx->f_dense_products = f_dense_products;
+      if(NJnnz > 0)
+      {
+        SAY("ERROR: dense solves must have NJnnz==0");
+        return -1.0;
+      }
+  }
+  else
+  {
+      SAY("ERROR: exactly one of (f,f_dense,f_dense_products) must be non-NULL");
+      return -1.0;
+  }
+
   ctx->cookie                 = cookie;
   ctx->factorization          = NULL;
   ctx->lambda                 = 0.0;
   ctx->Nstate                 = Nstate;
   ctx->Nmeasurements          = Nmeas;
   ctx->parameters             = parameters ? parameters : &parameters_global;
-  ctx->is_sparse              = NJnnz > 0;
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
     vnlog_debug_emit_legend();
@@ -1356,7 +1497,7 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   if( returnContext != NULL )
     *returnContext = ctx;
 
-  if(ctx->is_sparse)
+  if(ctx->solve_type == DOGLEG_SPARSE)
   {
     if( !cholmod_start(&ctx->common) )
     {
@@ -1367,8 +1508,8 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   }
 
 
-  ctx->beforeStep = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx->common);
-  ctx->afterStep  = allocOperatingPoint(Nstate, Nmeas, NJnnz, &ctx->common);
+  ctx->beforeStep = allocOperatingPoint(NJnnz, ctx);
+  ctx->afterStep  = allocOperatingPoint(NJnnz, ctx);
 
   memcpy(ctx->beforeStep->p, p, Nstate * sizeof(double));
 
@@ -1406,7 +1547,8 @@ double dogleg_optimize2(double* p, unsigned int Nstate,
     return -1.0;
   }
 
-  return _dogleg_optimize(p, Nstate, Nmeas, NJnnz, f,
+  return _dogleg_optimize(p, Nstate, Nmeas, NJnnz,
+                          f, NULL, NULL,
                           cookie,
                           parameters,
                           returnContext);
@@ -1430,7 +1572,20 @@ double dogleg_optimize_dense2(double* p, unsigned int Nstate,
                               const dogleg_parameters2_t* parameters,
                               dogleg_solverContext_t** returnContext)
 {
-  return _dogleg_optimize(p, Nstate, Nmeas, 0, (dogleg_callback_t*)f,
+  return _dogleg_optimize(p, Nstate, Nmeas, 0,
+                          NULL, f, NULL,
+                          cookie,
+                          parameters,
+                          returnContext);
+}
+double dogleg_optimize_dense_products(double* p, unsigned int Nstate,
+                                      unsigned int Nmeas,
+                                      dogleg_callback_dense_products_t* f, void* cookie,
+                                      const dogleg_parameters2_t* parameters,
+                                      dogleg_solverContext_t** returnContext)
+{
+  return _dogleg_optimize(p, Nstate, Nmeas, 0,
+                          NULL, NULL, f,
                           cookie,
                           parameters,
                           returnContext);
@@ -2278,10 +2433,19 @@ bool dogleg_getOutliernessFactors( // output
     return false;
 
   bool result;
-  if(ctx->is_sparse)
+  if( ctx->solve_type == DOGLEG_SPARSE )
     result = getOutliernessFactors_sparse(factors, scale, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
-  else
+  else if( ctx->solve_type == DOGLEG_DENSE )
     result = getOutliernessFactors_dense(factors, scale, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
+  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+  {
+    fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+    exit(1);
+  }
+  else
+  {
+    ASSERT(0);
+  }
 
 #if 0
   if( result )
@@ -2315,7 +2479,7 @@ bool dogleg_getOutliernessFactors( // output
       fprintf(fp, "%.20g,", point->x[j]);
     fprintf(fp,"))\n");
 
-    if( ctx->is_sparse )
+    if( ctx->solve_type == DOGLEG_SPARSE )
     {
       fprintf(fp, "J%d = np.zeros((%d,%d))\n", count, Nmeasurements, Nstate);
       for(int imeas=0;imeas<Nmeasurements;imeas++)
@@ -2330,7 +2494,7 @@ bool dogleg_getOutliernessFactors( // output
         }
       }
     }
-    else
+    else if( ctx->solve_type == DOGLEG_DENSE )
     {
       fprintf(fp, "J%d = np.array((\n", count);
       for(int j=0;j<Nmeasurements;j++)
@@ -2341,6 +2505,11 @@ bool dogleg_getOutliernessFactors( // output
         fprintf(fp, "),\n");
       }
       fprintf(fp,"))\n");
+    }
+    else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+    {
+      fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+      exit(1);
     }
 
     fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);
@@ -2548,7 +2717,7 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double*            Jqu
       fprintf(fp, "%.20g,", point->x[j]);
     fprintf(fp,"))\n");
 
-    if( ctx->is_sparse )
+    if( ctx->solve_type == DOGLEG_SPARSE )
     {
       fprintf(fp, "J%d = np.zeros((%d,%d))\n", count, Nmeasurements, Nstate);
       for(int imeas=0;imeas<Nmeasurements;imeas++)
@@ -2563,7 +2732,7 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double*            Jqu
         }
       }
     }
-    else
+    else if( ctx->solve_type == DOGLEG_DENSE )
     {
       fprintf(fp, "J%d = np.array((\n", count);
       for(int j=0;j<Nmeasurements;j++)
@@ -2574,6 +2743,11 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double*            Jqu
         fprintf(fp, "),\n");
       }
       fprintf(fp,"))\n");
+    }
+    else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+    {
+      fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
+      exit(1);
     }
 
     fprintf(fp, "Nmeasurements = %d\n", Nmeasurements);

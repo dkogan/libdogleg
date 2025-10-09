@@ -28,6 +28,20 @@ typedef void (dogleg_callback_dense_t)(// in
                                        double*         J,
                                        // context
                                        void*           cookie);
+// like dogleg_callback_dense_t, but returns much smaller arrays because Nstate
+// << Nmeasurements
+typedef void (dogleg_callback_dense_products_t)(// in
+                                                // shape (Nstate,)
+                                                const double*   p,
+                                                // out
+                                                // scalar
+                                                double*         norm2x,
+                                                // shape (Nstate,)
+                                                double*         xtJ,
+                                                // shape (Nstate,Nstate)
+                                                double*         JtJ,
+                                                // context
+                                                void*           cookie);
 
 // an operating point of the solver
 typedef struct
@@ -67,13 +81,17 @@ typedef struct
   // variables since nobody is using them
   union
   {
-    int dummy[3];
+    int dummy_bits[3];
     struct {
       bool have_updateCauchy               : 1; // and the norm2
       bool have_updateGN_and_factorization : 1; // and the norm2 and the factorization
       bool have_x                          : 1; // just x; norm2_x is always valid
       bool have_J                          : 1; // Jt or J_dense
       bool have_Jtx                        : 1;
+
+      // Used for dense_products only. If true, factorization_dense is JtJ. If
+      // false, factorization_dense is the cholesky factor of JtJ, as reported
+      // by dpptrf()
       bool have_JtJ                        : 1;
       bool have_step_to_here               : 1; // and the norm2
       bool didStepToEdgeOfTrustRegion      : 1;
@@ -113,6 +131,13 @@ typedef struct
   double trustregion_threshold;
 } dogleg_parameters2_t;
 
+typedef enum {
+  DOGLEG_DENSE          = 0,
+  DOGLEG_SPARSE         = 1,
+  DOGLEG_DENSE_PRODUCTS = 2 } dogleg_solve_type_t;
+_Static_assert(sizeof(dogleg_solve_type_t) == sizeof(int),
+               "solve_type should be as big as an int, to maintain ABI compatibility");
+
 // solver context. This has all the internal state of the solver
 typedef struct
 {
@@ -122,6 +147,7 @@ typedef struct
   {
     dogleg_callback_t*                f;
     dogleg_callback_dense_t*          f_dense;
+    dogleg_callback_dense_products_t* f_dense_products;
   };
   void*              cookie;
 
@@ -151,8 +177,9 @@ typedef struct
   double                   lambda;
 
   // Are we using sparse math (cholmod)?
-  int                      is_sparse;
-  int                      Nstate, Nmeasurements;
+  dogleg_solve_type_t solve_type;
+
+  int Nstate, Nmeasurements;
 
   const dogleg_parameters2_t* parameters;
 
@@ -237,6 +264,11 @@ double dogleg_optimize_dense2(double* p, unsigned int Nstate,
                               dogleg_callback_dense_t* f, void* cookie,
                               const dogleg_parameters2_t* parameters,
                               dogleg_solverContext_t** returnContext);
+double dogleg_optimize_dense_products(double* p, unsigned int Nstate,
+                                      unsigned int Nmeas,
+                                      dogleg_callback_dense_products_t* f, void* cookie,
+                                      const dogleg_parameters2_t* parameters,
+                                      dogleg_solverContext_t** returnContext);
 
 // Compute the cholesky decomposition of JtJ. This function is only exposed if
 // you need to touch libdogleg internals via returnContext. Sometimes after
@@ -254,7 +286,9 @@ void dogleg_testGradient(unsigned int var, const double* p0,
 void dogleg_testGradient_dense(unsigned int var, const double* p0,
                                unsigned int Nstate, unsigned int Nmeas,
                                dogleg_callback_dense_t* f, void* cookie);
-
+void dogleg_testGradient_dense_products(unsigned int var, const double* p0,
+                                        unsigned int Nstate, unsigned int Nmeas,
+                                        dogleg_callback_dense_products_t* f, void* cookie);
 
 // If we want to get the full solver state when we're done optimizing, we can
 // pass a non-NULL returnContext pointer to dogleg_optimize(). If we do this,
