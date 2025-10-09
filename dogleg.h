@@ -54,7 +54,7 @@ typedef struct
     cholmod_dense* updateGN_cholmoddense;
     double*        updateGN_dense;
   };
-  double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
+  double         norm2_updateCauchy, norm2_updateGN; // update vector lengths
 
   // Which elements of this structure contain valid data. The union is there for
   // compatibility with the previous API. I want to preserve the old layout and
@@ -72,7 +72,7 @@ typedef struct
   int didStepToEdgeOfTrustRegion;
 
   double* step_to_here;
-  double  step_to_here_len_sq;
+  double  norm2_step_to_here;
 
 } dogleg_operatingPoint_t;
 

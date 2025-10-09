@@ -473,15 +473,15 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
       norm2_mul_matrix_vector         (point->J_dense, point->Jt_x, ctx->Nmeasurements, ctx->Nstate);
     double k                = -norm2_Jt_x / norm2_J_Jt_x;
 
-    point->updateCauchy_lensq = k*k * norm2_Jt_x;
+    point->norm2_updateCauchy = k*k * norm2_Jt_x;
 
     vec_copy_scaled(point->updateCauchy,
                     point->Jt_x, k, ctx->Nstate);
-    SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->updateCauchy_lensq));
+    SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->norm2_updateCauchy));
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
-    vnlog_debug_data.step_len_cauchy = sqrt(point->updateCauchy_lensq);
+    vnlog_debug_data.step_len_cauchy = sqrt(point->norm2_updateCauchy);
 }
 
 // LAPACK prototypes for a packed cholesky factorization and a linear solve
@@ -628,7 +628,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
       vec_negate(point->updateGN_cholmoddense->x,
                  ctx->Nstate); // should be more efficient than this later
 
-      point->updateGN_lensq = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
+      point->norm2_updateGN = norm2(point->updateGN_cholmoddense->x, ctx->Nstate);
     }
     else
     {
@@ -640,15 +640,15 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
       vec_negate(point->updateGN_dense,
                  ctx->Nstate); // should be more efficient than this later
 
-      point->updateGN_lensq = norm2(point->updateGN_dense, ctx->Nstate);
+      point->norm2_updateGN = norm2(point->updateGN_dense, ctx->Nstate);
     }
 
-    SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->updateGN_lensq));
+    SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->norm2_updateGN));
     point->have.updateGN = 1;
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
-    vnlog_debug_data.step_len_gauss_newton = sqrt(point->updateGN_lensq);
+    vnlog_debug_data.step_len_gauss_newton = sqrt(point->norm2_updateGN);
 
 }
 
@@ -674,7 +674,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   // cauchy step.  The solution must have k in [0,1], so I much have the
   // +sqrt side, since the other one is negative
   double        dsq    = trustregion*trustregion;
-  double        norm2a = point->updateCauchy_lensq;
+  double        norm2a = point->norm2_updateCauchy;
   const double* a      = point->updateCauchy;
   const double* b      = ctx->is_sparse ? point->updateGN_cholmoddense->x : point->updateGN_dense;
 
@@ -775,7 +775,7 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
                            double* p_new,
                            double* step,
-                           double* step_len_sq,
+                           double* norm2_step,
                            double trustregion,
                            dogleg_solverContext_t* ctx)
 {
@@ -788,7 +788,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
 
   computeCauchyUpdate(pointFrom, ctx);
 
-  if(pointFrom->updateCauchy_lensq >= trustregion*trustregion)
+  if(pointFrom->norm2_updateCauchy >= trustregion*trustregion)
   {
     SAY_IF_VERBOSE( "taking cauchy step");
     if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
@@ -796,13 +796,13 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
       vnlog_debug_data.step_type = STEPTYPE_CAUCHY;
       vnlog_debug_data.step_len  = vnlog_debug_data.step_len_cauchy;
     }
-    *step_len_sq = pointFrom->updateCauchy_lensq;
+    *norm2_step = pointFrom->norm2_updateCauchy;
 
     // cauchy step goes beyond my trust region, so I do a gradient descent
     // to the edge of my trust region and call it good
     vec_copy_scaled(step,
                     pointFrom->updateCauchy,
-                    trustregion / sqrt(pointFrom->updateCauchy_lensq),
+                    trustregion / sqrt(pointFrom->norm2_updateCauchy),
                     ctx->Nstate);
     pointFrom->didStepToEdgeOfTrustRegion = 1;
   }
@@ -815,7 +815,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
     // the Gauss-Newton solution, and use that. This is the heart of Powell's
     // dog-leg algorithm.
     computeGaussNewtonUpdate(pointFrom, ctx);
-    if(pointFrom->updateGN_lensq <= trustregion*trustregion)
+    if(pointFrom->norm2_updateGN <= trustregion*trustregion)
     {
       SAY_IF_VERBOSE( "taking GN step");
       if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
@@ -823,7 +823,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
         vnlog_debug_data.step_type = STEPTYPE_GAUSSNEWTON;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_gauss_newton;
       }
-      *step_len_sq = pointFrom->updateGN_lensq;
+      *norm2_step = pointFrom->norm2_updateGN;
 
       // full Gauss-Newton step lies within my trust region. Take the full step
       memcpy( step,
@@ -839,7 +839,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
       computeInterpolatedUpdate(step,
-                                step_len_sq,
+                                norm2_step,
                                 pointFrom, trustregion, ctx);
       pointFrom->didStepToEdgeOfTrustRegion = 1;
       if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
@@ -857,11 +857,11 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
   {
     vnlog_debug_data.expected_improvement = expectedImprovement;
 
-    if(pointFrom->step_to_here_len_sq != INFINITY)
+    if(pointFrom->norm2_step_to_here != INFINITY)
     {
       double cos_direction_change =
         inner(step, pointFrom->step_to_here, ctx->Nstate) /
-        sqrt(*step_len_sq * pointFrom->step_to_here_len_sq);
+        sqrt(*norm2_step * pointFrom->norm2_step_to_here);
 
       // check the numerical overflow cases
       if(cos_direction_change >= 1.0)
@@ -915,7 +915,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
     // constant factor. Otherwise, drop the trustregion to attempted step size
     // first
     if( !before->didStepToEdgeOfTrustRegion )
-      *trustregion = sqrt(before->updateGN_lensq);
+      *trustregion = sqrt(before->norm2_updateGN);
 
     *trustregion *= ctx->parameters->trustregion_decrease_factor;
   }
@@ -942,7 +942,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   SAY_IF_VERBOSE( "Initial operating point has norm2_x %.6g", ctx->beforeStep->norm2_x);
 
 
-  ctx->beforeStep->step_to_here_len_sq = INFINITY;
+  ctx->beforeStep->norm2_step_to_here = INFINITY;
 
   while( stepCount<ctx->parameters->max_iterations )
   {
@@ -956,7 +956,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         takeStepFrom(ctx->beforeStep,
                      ctx->afterStep->p,
                      ctx->afterStep->step_to_here,
-                     &ctx->afterStep->step_to_here_len_sq,
+                     &ctx->afterStep->norm2_step_to_here,
                      trustregion, ctx);
 
       // negative expectedImprovement is used to indicate that we're done
