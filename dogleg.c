@@ -664,6 +664,11 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
                                                    ctx->factorization,
                                                    &Jt_x_dense,
                                                    &ctx->common);
+      if(point->updateGN_cholmoddense == NULL)
+      {
+        SAY("cholmod_solve() failed");
+        return false;
+      }
       vec_negate(point->updateGN_cholmoddense->x,
                  ctx->Nstate); // should be more efficient than this later
 
