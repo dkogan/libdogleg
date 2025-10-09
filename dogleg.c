@@ -445,8 +445,8 @@ void dogleg_testGradient_dense(unsigned int var, const double* p0,
 // solver routines
 //////////////////////////////////////////////////////////////////////////////////////////
 
-static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
-                                const dogleg_solverContext_t* ctx)
+static void compute_updateCauchy(dogleg_operatingPoint_t* point,
+                                 const dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
   if(!point->have.updateCauchy)
@@ -597,7 +597,7 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
   }
 }
 
-static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
+static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
   if(!point->have.updateGN)
@@ -786,7 +786,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
     vnlog_debug_data.norm2x_before      = pointFrom->norm2_x;
   }
 
-  computeCauchyUpdate(pointFrom, ctx);
+  compute_updateCauchy(pointFrom, ctx);
 
   if(pointFrom->norm2_updateCauchy >= trustregion*trustregion)
   {
@@ -814,7 +814,7 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
     // trust region that lies on a straight line between the Cauchy point and
     // the Gauss-Newton solution, and use that. This is the heart of Powell's
     // dog-leg algorithm.
-    computeGaussNewtonUpdate(pointFrom, ctx);
+    compute_updateGN(pointFrom, ctx);
     if(pointFrom->norm2_updateGN <= trustregion*trustregion)
     {
       SAY_IF_VERBOSE( "taking GN step");
