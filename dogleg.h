@@ -36,7 +36,12 @@ typedef struct
   // (see allocOperatingPoint()). I thus don't need to store the pointers at
   // all, and can just index that one array directly, but that would break my
   // ABI
+
+  // This is always available
   double*         p;
+
+  // These may or may not be available at any given time because they may not
+  // have been computed yet.
   double*         x;
   double          norm2_x;
   union
