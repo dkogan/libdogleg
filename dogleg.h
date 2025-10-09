@@ -69,8 +69,8 @@ typedef struct
   {
     int dummy[2];
     struct {
-      unsigned int updateCauchy               : 1; // and the norm2
-      unsigned int updateGN_and_factorization : 1; // and the norm2 and the factorization
+      bool updateCauchy               : 1; // and the norm2
+      bool updateGN_and_factorization : 1; // and the norm2 and the factorization
     } have;
   };
 
