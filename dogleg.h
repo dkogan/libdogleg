@@ -69,9 +69,9 @@ typedef struct
   {
     int dummy[2];
     struct {
-      bool updateCauchy               : 1; // and the norm2
-      bool updateGN_and_factorization : 1; // and the norm2 and the factorization
-    } have;
+      bool have_updateCauchy               : 1; // and the norm2
+      bool have_updateGN_and_factorization : 1; // and the norm2 and the factorization
+    };
   };
 
   int didStepToEdgeOfTrustRegion;

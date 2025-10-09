@@ -449,9 +449,9 @@ static void compute_updateCauchy(dogleg_operatingPoint_t* point,
                                  const dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->have.updateCauchy)
+  if(!point->have_updateCauchy)
   {
-    point->have.updateCauchy = true;
+    point->have_updateCauchy = true;
 
     // I look at a step in the steepest direction that minimizes my
     // quadratic error function (Cauchy point). If this is past my trust region,
@@ -496,7 +496,7 @@ int dpptrs_(char* uplo, int* n, int* nrhs,
 void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->have.updateGN_and_factorization)
+  if(point->have_updateGN_and_factorization)
     return;
 
   if( ctx->is_sparse )
@@ -600,7 +600,7 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->have.updateGN_and_factorization)
+  if(!point->have_updateGN_and_factorization)
   {
     dogleg_computeJtJfactorization(point, ctx);
 
@@ -644,7 +644,7 @@ static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     }
 
     SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->norm2_updateGN));
-    point->have.updateGN_and_factorization = true;
+    point->have_updateGN_and_factorization = true;
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
@@ -673,7 +673,7 @@ static bool computeInterpolatedUpdate(double*                  update_dogleg,
   // to make 100% sure the discriminant is positive, I choose a to be the
   // cauchy step.  The solution must have k in [0,1], so I much have the
   // +sqrt side, since the other one is negative
-  if(!point->have.updateCauchy)
+  if(!point->have_updateCauchy)
   {
     SAY("ERROR: In %s() updateCauchy should already have been computed. This is a bug", __func__);
     return false;
@@ -748,8 +748,8 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
 
   // I just got a new operating point, so the current update vectors aren't
   // valid anymore, and should be recomputed, as needed
-  point->have.updateCauchy               = false;
-  point->have.updateGN_and_factorization = false;
+  point->have_updateCauchy               = false;
+  point->have_updateGN_and_factorization = false;
 
   // compute the 2-norm of the current error vector
   // At some point this should be changed to use the call from libminimath
@@ -938,7 +938,7 @@ static bool evaluateStep_adjustTrustRegion(// out
     // first
     if( !before->didStepToEdgeOfTrustRegion )
     {
-      if(!before->have.updateGN_and_factorization)
+      if(!before->have_updateGN_and_factorization)
       {
         SAY("ERROR: In %s() updateGN should already have been computed. This is a bug", __func__);
         return false;
@@ -1129,8 +1129,8 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
   }
 
   // vectors don't have any valid data yet
-  point->have.updateCauchy               = false;
-  point->have.updateGN_and_factorization = false;
+  point->have_updateCauchy               = false;
+  point->have_updateGN_and_factorization = false;
 
   return point;
 }
