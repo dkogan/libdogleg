@@ -71,9 +71,10 @@ typedef struct
     struct {
       bool have_updateCauchy               : 1; // and the norm2
       bool have_updateGN_and_factorization : 1; // and the norm2 and the factorization
-      bool have_x                          : 1; // and the norm2
+      bool have_x                          : 1; // just x; norm2_x is always valid
       bool have_J                          : 1; // Jt or J_dense
-      bool have_Jt_x                       : 1;
+      bool have_Jtx                        : 1;
+      bool have_JtJ                        : 1;
       bool have_step_to_here               : 1; // and the norm2
       bool didStepToEdgeOfTrustRegion      : 1;
     };
@@ -132,7 +133,8 @@ typedef struct
 
   // The result of the last JtJ factorization performed. Note that JtJ is not
   // necessarily factorized at every step, so this is NOT guaranteed to contain
-  // the factorization of the most recent JtJ
+  // the factorization of the most recent JtJ. Use
+  // point->have.updateGN_and_factorization
   union
   {
     cholmod_factor* factorization;
@@ -242,7 +244,7 @@ double dogleg_optimize_dense2(double* p, unsigned int Nstate,
 // and this call ensures that the factorization is available. Most people don't
 // need this function. If the comment wasn't clear, you don't need this
 // function.
-void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
+bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx);
 
 // Generates a plain text table that contains gradient checks. This table can be
 // easily parsed with "vnlog" tools
