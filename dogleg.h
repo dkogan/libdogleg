@@ -56,8 +56,18 @@ typedef struct
   };
   double         updateCauchy_lensq, updateGN_lensq; // update vector lengths
 
-  // whether the current update vectors are correct or not
-  int updateCauchy_valid, updateGN_valid;
+  // Which elements of this structure contain valid data. The union is there for
+  // compatibility with the previous API. I want to preserve the old layout and
+  // sizeof(dogleg_operatingPoint_t); I don't care about renaming THESE
+  // variables since nobody is using them
+  union
+  {
+    int dummy[2];
+    struct {
+      unsigned int updateCauchy : 1;
+      unsigned int updateGN     : 1;
+    } have;
+  };
 
   int didStepToEdgeOfTrustRegion;
 

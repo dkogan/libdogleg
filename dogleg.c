@@ -449,9 +449,9 @@ static void computeCauchyUpdate(dogleg_operatingPoint_t* point,
                                 const dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->updateCauchy_valid)
+  if(!point->have.updateCauchy)
   {
-    point->updateCauchy_valid = 1;
+    point->have.updateCauchy = 1;
 
     // I look at a step in the steepest direction that minimizes my
     // quadratic error function (Cauchy point). If this is past my trust region,
@@ -496,7 +496,7 @@ int dpptrs_(char* uplo, int* n, int* nrhs,
 void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->updateGN_valid)
+  if(point->have.updateGN)
     return;
 
   if( ctx->is_sparse )
@@ -600,7 +600,7 @@ void dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->updateGN_valid)
+  if(!point->have.updateGN)
   {
     dogleg_computeJtJfactorization(point, ctx);
 
@@ -644,7 +644,7 @@ static void computeGaussNewtonUpdate(dogleg_operatingPoint_t* point, dogleg_solv
     }
 
     SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->updateGN_lensq));
-    point->updateGN_valid = 1;
+    point->have.updateGN = 1;
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
@@ -736,8 +736,8 @@ static int computeCallbackOperatingPoint(dogleg_operatingPoint_t* point, dogleg_
 
   // I just got a new operating point, so the current update vectors aren't
   // valid anymore, and should be recomputed, as needed
-  point->updateCauchy_valid = 0;
-  point->updateGN_valid     = 0;
+  point->have.updateCauchy = 0;
+  point->have.updateGN     = 0;
 
   // compute the 2-norm of the current error vector
   // At some point this should be changed to use the call from libminimath
@@ -1083,8 +1083,8 @@ dogleg_operatingPoint_t* allocOperatingPoint(int Nstate, int numMeasurements,
   }
 
   // vectors don't have any valid data yet
-  point->updateCauchy_valid = 0;
-  point->updateGN_valid     = 0;
+  point->have.updateCauchy = 0;
+  point->have.updateGN     = 0;
 
   return point;
 }
