@@ -8,13 +8,25 @@
 #include <cholmod.h>
 #include <stdbool.h>
 
-typedef void (dogleg_callback_t)(const double*   p,
+typedef void (dogleg_callback_t)(// in
+                                 // shape (Nstate,)
+                                 const double*   p,
+                                 // out
+                                 // shape (Nmeasurements,)
                                  double*         x,
+                                 // shape (Nstate,Nmeasurements,)
                                  cholmod_sparse* Jt,
+                                 // context
                                  void*           cookie);
-typedef void (dogleg_callback_dense_t)(const double*   p,
+typedef void (dogleg_callback_dense_t)(// in
+                                       // shape (Nstate,)
+                                       const double*   p,
+                                       // out
+                                       // shape (Nmeasurements,)
                                        double*         x,
+                                       // shape (Nmeasurements,Nstate,)
                                        double*         J,
+                                       // context
                                        void*           cookie);
 
 // an operating point of the solver
@@ -89,8 +101,8 @@ typedef struct
 
   union
   {
-    dogleg_callback_t*       f;
-    dogleg_callback_dense_t* f_dense;
+    dogleg_callback_t*                f;
+    dogleg_callback_dense_t*          f_dense;
   };
   void*              cookie;
 
