@@ -652,7 +652,7 @@ static void compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
 
 }
 
-static void computeInterpolatedUpdate(double*                  update_dogleg,
+static bool computeInterpolatedUpdate(double*                  update_dogleg,
                                       double*                  update_dogleg_lensq,
                                       dogleg_operatingPoint_t* point,
                                       double                   trustregion,
@@ -673,6 +673,12 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
   // to make 100% sure the discriminant is positive, I choose a to be the
   // cauchy step.  The solution must have k in [0,1], so I much have the
   // +sqrt side, since the other one is negative
+  if(!point->have.updateCauchy)
+  {
+    SAY("ERROR: In %s() updateCauchy should already have been computed. This is a bug", __func__);
+    return false;
+  }
+
   double        dsq    = trustregion*trustregion;
   double        norm2a = point->norm2_updateCauchy;
   const double* a      = point->updateCauchy;
@@ -711,6 +717,7 @@ static void computeInterpolatedUpdate(double*                  update_dogleg,
     vnlog_debug_data.step_len_interpolated = sqrt(*update_dogleg_lensq);
     vnlog_debug_data.k_cauchy_to_gn        = k;
   }
+  return true;
 }
 
 // takes in point->p, and computes all the quantities derived from it, storing
@@ -770,14 +777,18 @@ static double computeExpectedImprovement(const double* step, const dogleg_operat
 
 
 // takes a step from the given operating point, using the given trust region
-// radius. Returns the expected improvement, based on the step taken and the
-// linearized x(p). If we can stop iterating, returns a negative number
-static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
-                           double* p_new,
-                           double* step,
-                           double* norm2_step,
-                           double trustregion,
-                           dogleg_solverContext_t* ctx)
+// radius. Reported *expected improvement is based on the step taken and the
+// linearized x(p). If we can stop iterating, report a negative number in
+// *expected_improvement. Returns false on error
+static bool takeStepFrom(// out
+                         double* expectedImprovement,
+                         double* p_new,
+                         double* step,
+                         double* norm2_step,
+                         // in
+                         dogleg_operatingPoint_t* pointFrom,
+                         double trustregion,
+                         dogleg_solverContext_t* ctx)
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
   if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
@@ -838,9 +849,11 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
       // full Gauss-Newton step lies outside my trust region, so I interpolate
       // between the Cauchy-point step and the Gauss-Newton step to find a step
       // that takes me to the edge of my trust region.
-      computeInterpolatedUpdate(step,
-                                norm2_step,
-                                pointFrom, trustregion, ctx);
+      if(!computeInterpolatedUpdate(step,
+                                    norm2_step,
+                                    pointFrom, trustregion, ctx))
+        return false;
+
       pointFrom->didStepToEdgeOfTrustRegion = 1;
       if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
       {
@@ -852,10 +865,10 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
 
   // take the step
   vec_add(p_new, pointFrom->p, step, ctx->Nstate);
-  double expectedImprovement = computeExpectedImprovement(step, pointFrom, ctx);
+  *expectedImprovement = computeExpectedImprovement(step, pointFrom, ctx);
   if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
   {
-    vnlog_debug_data.expected_improvement = expectedImprovement;
+    vnlog_debug_data.expected_improvement = *expectedImprovement;
 
     if(pointFrom->norm2_step_to_here != INFINITY)
     {
@@ -877,11 +890,12 @@ static double takeStepFrom(dogleg_operatingPoint_t* pointFrom,
   // a threshold, I call myself done
   for(int i=0; i<ctx->Nstate; i++)
     if( fabs(step[i]) > ctx->parameters->update_threshold )
-      return expectedImprovement;
+      return true;
 
   SAY_IF_VERBOSE( "update small enough. Done iterating!");
 
-  return -1.0;
+  *expectedImprovement = -1.0;
+  return true;
 }
 
 
@@ -931,6 +945,7 @@ static int evaluateStep_adjustTrustRegion(const dogleg_operatingPoint_t* before,
   return rho > 0.0;
 }
 
+// returns the step count or <0 on error
 static int runOptimizer(dogleg_solverContext_t* ctx)
 {
   double trustregion = ctx->parameters->trustregion0;
@@ -952,12 +967,17 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
     {
       SAY_IF_VERBOSE("--------");
 
-      double expectedImprovement =
-        takeStepFrom(ctx->beforeStep,
-                     ctx->afterStep->p,
-                     ctx->afterStep->step_to_here,
-                     &ctx->afterStep->norm2_step_to_here,
-                     trustregion, ctx);
+      double expectedImprovement;
+      if(!takeStepFrom(// out
+                       &expectedImprovement,
+                       ctx->afterStep->p,
+                       ctx->afterStep->step_to_here,
+                       &ctx->afterStep->norm2_step_to_here,
+                       // in
+                       ctx->beforeStep,
+                       trustregion,
+                       ctx))
+        return -1;
 
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
@@ -1204,7 +1224,11 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
 
   // everything is set up, so run the solver!
   int    numsteps = runOptimizer(ctx);
-  double norm2_x  = ctx->beforeStep->norm2_x;
+  if(numsteps < 0)
+  {
+    SAY("ERROR: %s() failed", __func__);
+    return -1.0;
+  }
 
   // runOptimizer places the most recent results into beforeStep in preparation for another
   // iteration
@@ -1215,7 +1239,7 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   if( returnContext == NULL )
     dogleg_freeContext(&ctx);
 
-  return norm2_x;
+  return ctx->beforeStep->norm2_x;
 }
 
 double dogleg_optimize2(double* p, unsigned int Nstate,
