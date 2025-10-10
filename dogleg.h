@@ -243,6 +243,8 @@ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 // If we want to get the full solver state when we're done, a non-NULL
 // returnContext pointer can be given. If this is done then THE USER IS
 // RESPONSIBLE FOR FREEING ITS MEMORY WITH dogleg_freeContext()
+//
+// Returns norm2(x) on success or <0 on error
 double dogleg_optimize(double* p, unsigned int Nstate,
                        unsigned int Nmeas, unsigned int NJnnz,
                        dogleg_callback_t* f, void* cookie,
