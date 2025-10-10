@@ -1085,12 +1085,7 @@ static bool takeStepFrom(// out
   {
     vnlog_debug_data.expected_improvement = *expectedImprovement;
 
-    if(!pointFrom->have_step_to_here)
-    {
-      SAY("%s() needs step_to_here, but it isn't available", __func__);
-      return false;
-    }
-    if(pointFrom->norm2_step_to_here != INFINITY)
+    if(pointFrom->have_step_to_here)
     {
       double cos_direction_change =
         inner(step, pointFrom->step_to_here, ctx->Nstate) /
@@ -1189,8 +1184,6 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
   SAY_IF_VERBOSE( "Initial operating point has norm2_x %.6g", ctx->beforeStep->norm2_x);
 
 
-  ctx->beforeStep->norm2_step_to_here = INFINITY;
-
   while( stepCount<ctx->parameters->max_iterations )
   {
     SAY_IF_VERBOSE( "================= step %d", stepCount );
@@ -1199,6 +1192,9 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
     {
       SAY_IF_VERBOSE("--------");
 
+      // We're trying again with a new trust region. We're about to compute a
+      // new step
+      ctx->afterStep->have_step_to_here = false;
       double expectedImprovement;
       if(!takeStepFrom(// out
                        &expectedImprovement,
