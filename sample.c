@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <getopt.h>
 
 #include "dogleg.h"
 
@@ -172,78 +173,81 @@ static void optimizerCallback_dense(const double*   p,
 
 int main(int argc, char* argv[] )
 {
-  const char* usage = "Usage: %s [--diag-vnlog] [--diag-human] sparse|dense [test-gradients]\n";
+  const char* usage =
+    "Usage: %s [--diag vnlog|human] [--test-gradients] sparse|dense\n";
 
-  int is_sparse;
-  int test_gradients = 0;
-  int debug          = 0;
+  struct option opts[] = {
+    { "diag",           required_argument, NULL, 'd' },
+    { "test-gradients", no_argument,       NULL, 'g' },
+    { "help",           no_argument,       NULL, 'h' },
+    {}
+  };
 
+  bool is_sparse      = false;
+  bool test_gradients = false;
+  int  debug          = 0;
+
+  int opt;
+  do
   {
-    // argument parsing
-    int iarg = 1;
-    for(int i=0; i<2; i++)
+    // "h" means -h does something
+    opt = getopt_long(argc, argv, "+h", opts, NULL);
+    switch(opt)
     {
-      if(iarg >= argc)
-      {
-        fprintf(stderr, usage, argv[0]);
-        return 1;
-      }
-      if(0 == strcmp("--diag-vnlog", argv[iarg]))
+    case -1:
+      break;
+
+    case 'h':
+      printf(usage, argv[0]);
+      return 0;
+
+    case 'd':
+      if(0 == strcmp("vnlog", optarg))
       {
         debug |= DOGLEG_DEBUG_VNLOG;
-        iarg++;
-        continue;
+        break;
       }
-      if(0 == strcmp("--diag-human", argv[iarg]))
+      if(0 == strcmp("human", optarg))
       {
         debug |= 1;
-        iarg++;
-        continue;
+        break;
       }
+      fprintf(stderr, "--diag must be followed by 'vnlog' or 'human'\n");
+      return 1;
+
+    case 'g':
+      test_gradients = true;
       break;
-    }
 
-    if(iarg >= argc)
-    {
+    case '?':
+      fprintf(stderr, "Unknown option\n\n");
       fprintf(stderr, usage, argv[0]);
       return 1;
     }
-    if( 0 == strcmp(argv[iarg], "dense") )
-    {
-      fprintf(stderr, "Using DENSE math\n");
-      is_sparse = 0;
-    }
-    else if( 0 == strcmp(argv[iarg], "sparse") )
-    {
-      fprintf(stderr, "Using SPARSE math\n");
-      is_sparse = 1;
-    }
-    else
-    {
-      fprintf(stderr, usage, argv[0]);
-      return 1;
-    }
+  } while( opt != -1 );
 
-    iarg++;
-    if(iarg == argc-1)
-    {
-      if( 0 != strcmp("test-gradients", argv[iarg]))
-      {
-        fprintf(stderr, usage, argv[0]);
-        return 1;
-      }
-      fprintf(stderr, "Testing the gradients only\n");
-      test_gradients = 1;
-    }
-    else if(iarg == argc)
-    {
-      // not testing gradients. We're good
-    }
-    else
-    {
-      fprintf(stderr, usage, argv[0]);
-      return 1;
-    }
+  const int Nargs_remaining = argc-optind;
+  if( Nargs_remaining != 1 )
+  {
+    fprintf(stderr, "Need exactly 1 non-option argument: 'sparse' or 'dense'. Got %d\n\n",Nargs_remaining);
+    fprintf(stderr, usage, argv[0]);
+    return 1;
+  }
+  if( 0 == strcmp(argv[optind], "dense") )
+  {
+    fprintf(stderr, "Using DENSE math\n");
+    is_sparse = false;
+  }
+  else if( 0 == strcmp(argv[optind], "sparse") )
+  {
+    fprintf(stderr, "Using SPARSE math\n");
+    is_sparse = true;
+  }
+  else
+  {
+    fprintf(stderr, "The final argument must be 'sparse' or 'dense'\n\n");
+    fprintf(stderr, usage, argv[0]);
+    return 1;
   }
 
 
