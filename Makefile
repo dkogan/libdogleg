@@ -23,6 +23,10 @@ CFLAGS += -Wall -Wextra -I/usr/include/suitesparse
 
 sample.o: CFLAGS += -I.
 
+check: sample
+	./check.sh
+.PHONY: check
+
 MAN_SECTION := 3
 MAN_TARGET  := libdogleg.$(MAN_SECTION)
 DIST_MAN    := $(MAN_TARGET)
