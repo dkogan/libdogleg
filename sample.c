@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <math.h>
 #include <getopt.h>
 
 #include "dogleg.h"
@@ -171,20 +172,28 @@ static void optimizerCallback_dense(const double*   p,
 }
 
 
+
+#define GREEN       "\x1b[32m"
+#define RED         "\x1b[31m"
+#define COLOR_RESET "\x1b[0m"
+
+
 int main(int argc, char* argv[] )
 {
   const char* usage =
-    "Usage: %s [--diag vnlog|human] [--test-gradients] sparse|dense\n";
+    "Usage: %s [--check] [--diag vnlog|human] [--test-gradients] sparse|dense\n";
 
   struct option opts[] = {
     { "diag",           required_argument, NULL, 'd' },
     { "test-gradients", no_argument,       NULL, 'g' },
+    { "check",          no_argument,       NULL, 'c' },
     { "help",           no_argument,       NULL, 'h' },
     {}
   };
 
   bool is_sparse      = false;
   bool test_gradients = false;
+  bool check          = false;
   int  debug          = 0;
 
   int opt;
@@ -219,6 +228,10 @@ int main(int argc, char* argv[] )
       test_gradients = true;
       break;
 
+    case 'c':
+      check = true;
+      break;
+
     case '?':
       fprintf(stderr, "Unknown option\n\n");
       fprintf(stderr, usage, argv[0]);
@@ -234,15 +247,9 @@ int main(int argc, char* argv[] )
     return 1;
   }
   if( 0 == strcmp(argv[optind], "dense") )
-  {
-    fprintf(stderr, "Using DENSE math\n");
     is_sparse = false;
-  }
   else if( 0 == strcmp(argv[optind], "sparse") )
-  {
-    fprintf(stderr, "Using SPARSE math\n");
     is_sparse = true;
-  }
   else
   {
     fprintf(stderr, "The final argument must be 'sparse' or 'dense'\n\n");
@@ -250,6 +257,19 @@ int main(int argc, char* argv[] )
     return 1;
   }
 
+  if(check && test_gradients)
+  {
+    fprintf(stderr, "--check and --test-gradients are exclusive\n");
+    return 1;
+  }
+
+  if(!check)
+  {
+    if(is_sparse)
+      fprintf(stderr, "Using SPARSE math\n");
+    else
+      fprintf(stderr, "Using DENSE math\n");
+  }
 
 
   srandom( 0 ); // I want determinism here
@@ -267,9 +287,12 @@ int main(int argc, char* argv[] )
   for(int i=0; i<Nstate; i++)
     p[i] = ((double)random() / (double)RAND_MAX - 0.1) * 1.0; // +- 0.1 units of uniformly-random noise
 
-  fprintf(stderr, "starting state:\n");
-  for(int i=0; i<Nstate; i++)
-    fprintf(stderr, "  p[%d] = %f\n", i, p[i]);
+  if(!check)
+  {
+    fprintf(stderr, "starting state:\n");
+    for(int i=0; i<Nstate; i++)
+      fprintf(stderr, "  p[%d] = %f\n", i, p[i]);
+  }
 
   // This demo problem is dense, so every measurement depends on every state
   // variable. Thus ever element of the jacobian is non-zero
@@ -281,7 +304,8 @@ int main(int argc, char* argv[] )
   // the final application. This will generate LOTS of output. You need to make
   // sure that the reported and observed gradients match (the relative error is
   // low)
-  fprintf(stderr, "have %d variables\n", Nstate);
+  if(!check)
+    fprintf(stderr, "have %d variables\n", Nstate);
   if( test_gradients )
   {
     for(int i=0; i<Nstate; i++)
@@ -295,7 +319,8 @@ int main(int argc, char* argv[] )
     return 0;
   }
 
-  fprintf(stderr, "SOLVING:\n");
+  if(!check)
+    fprintf(stderr, "SOLVING:\n");
 
   double optimum;
   if( is_sparse )
@@ -307,11 +332,50 @@ int main(int argc, char* argv[] )
                                      &optimizerCallback_dense, NULL,
                                      &dogleg_parameters, NULL);
 
-  fprintf(stderr, "Done. Optimum = %f\n", optimum);
+  if(check)
+  {
+    if(optimum < 0)
+    {
+      printf(RED "ERROR: the optimization did not converge\n" COLOR_RESET);
+      return 1;
+    }
 
-  fprintf(stderr, "optimal state:\n");
-  for(int i=0; i<Nstate; i++)
-    fprintf(stderr, "  p[%d] = %f\n", i, p[i]);
+    printf(GREEN "OK: the optimization converged to an optimum  of norm2(x)=%.1f\n" COLOR_RESET,
+           optimum);
+
+    bool anyfailed = false;
+    const double pref[] =
+      { REFERENCE_A,
+        REFERENCE_B,
+        REFERENCE_C,
+        REFERENCE_D,
+        REFERENCE_E,
+        REFERENCE_F };
+    for(int i=0; i<Nstate; i++)
+    {
+      const double err = p[i] - pref[i];
+      if(fabs(err) < 5e-2)
+        printf(GREEN "OK: parameter %d recovered: psolved=%.3f pref=%.3f perr=%.3f\n" COLOR_RESET,
+               i, pref[i], p[i], err);
+      else
+      {
+        printf(RED "ERROR: parameter %d was NOT recovered: psolved=%.3f pref=%.3f perr=%.3f\n" COLOR_RESET,
+               i, pref[i], p[i], err);
+        anyfailed = true;
+      }
+    }
+
+    return anyfailed ? 1 : 0;
+  }
+  else
+  {
+    fprintf(stderr, "Done. Optimum = %f\n", optimum);
+    if(optimum < 0)
+      fprintf(stderr, "optimum<0: an error has occurred\n");
+    fprintf(stderr, "optimal state:\n");
+    for(int i=0; i<Nstate; i++)
+      fprintf(stderr, "  p[%d] = %f\n", i, p[i]);
+  }
 
   return 0;
 }
