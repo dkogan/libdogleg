@@ -28,6 +28,17 @@ typedef void (dogleg_callback_dense_t)(// in
                                        double*         J,
                                        // context
                                        void*           cookie);
+typedef struct
+{
+  // LAPACK packed storage:
+  // [ A B C ]
+  // [ B D E ]
+  // [ C E F ]
+  bool packed : 1;
+  // upper is [A B C D E F]
+  // lower is [A B D C E F]
+  bool upper  : 1;
+} dogleg_packed_selection_t;
 // like dogleg_callback_dense_t, but returns much smaller arrays because Nstate
 // << Nmeasurements
 typedef void (dogleg_callback_dense_products_t)(// in
@@ -40,6 +51,8 @@ typedef void (dogleg_callback_dense_products_t)(// in
                                                 double*         xtJ,
                                                 // shape (Nstate,Nstate)
                                                 double*         JtJ,
+                                                // TODAY only packed and upper is supported
+                                                dogleg_packed_selection_t* JtJ_format,
                                                 // context
                                                 void*           cookie);
 
