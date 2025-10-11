@@ -586,14 +586,14 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
   if(point->have_updateGN_and_factorization)
     return true;
 
-  if(!point->have_J)
-  {
-    SAY("%s() needs J, but it isn't available", __func__);
-    return false;
-  }
-
   if( ctx->solve_type == DOGLEG_SPARSE )
   {
+    if(!point->have_J)
+    {
+      SAY("%s() needs J, but it isn't available", __func__);
+      return false;
+    }
+
     // I'm assuming the pattern of zeros will remain the same throughout, so I
     // analyze only once
     if(ctx->factorization == NULL)
@@ -627,6 +627,12 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
   }
   else if( ctx->solve_type == DOGLEG_DENSE )
   {
+    if(!point->have_J)
+    {
+      SAY("%s() needs J, but it isn't available", __func__);
+      return false;
+    }
+
     while(1)
     {
       // I construct my JtJ. JtJ is packed and stored row-first. I have two
