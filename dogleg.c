@@ -1443,6 +1443,14 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
                                dogleg_solverContext_t** returnContext)
 {
   dogleg_solverContext_t* ctx = malloc(sizeof(dogleg_solverContext_t));
+  *ctx = (dogleg_solverContext_t){
+    .cookie        = cookie,
+    .factorization = NULL,
+    .lambda        = 0.0,
+    .Nstate        = Nstate,
+    .Nmeasurements = Nmeas,
+    .parameters    = parameters ? parameters : &parameters_global,
+  };
 
   if(f != NULL)
   {
@@ -1479,13 +1487,6 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
       SAY("ERROR: exactly one of (f,f_dense,f_dense_products) must be non-NULL");
       return -1.0;
   }
-
-  ctx->cookie                 = cookie;
-  ctx->factorization          = NULL;
-  ctx->lambda                 = 0.0;
-  ctx->Nstate                 = Nstate;
-  ctx->Nmeasurements          = Nmeas;
-  ctx->parameters             = parameters ? parameters : &parameters_global;
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
     vnlog_debug_emit_legend();
