@@ -172,6 +172,65 @@ static void optimizerCallback_dense(const double*   p,
 }
 
 
+static void optimizerCallback_dense_products(// in
+                                                // shape (Nstate,)
+                                                const double*   p,
+                                                // out
+                                                // scalar
+                                                double*         norm2x,
+                                                // shape (Nstate,)
+                                                double*         xtJ,
+                                                // shape (Nstate,Nstate)
+                                                double*         JtJ,
+                                                // TODAY only packed and upper is supported
+                                                dogleg_packed_selection_t* JtJ_format,
+                                                // context
+                                                void*           cookie __attribute__ ((unused)) )
+{
+  *norm2x = 0.0;
+
+  memset(xtJ, 0, Nstate*sizeof(xtJ[0]));
+  memset(JtJ, 0, (Nstate+1)*(Nstate)/2*sizeof(JtJ[0]));
+  for(int i=0; i<Nmeasurements; i++)
+  {
+    double x =
+      p[0] * p[1] * allx[i]*allx[i] +
+      p[1] * p[2] * ally[i]*ally[i] +
+      p[2] *        allx[i]*ally[i] +
+      p[3] *        allx[i] +
+      p[4] *        ally[i] +
+      p[5]
+      - allm_simulated_noisy[i];
+
+    *norm2x += x*x;
+
+    // In this sample problem, every measurement depends on every element of the
+    // state vector, so I loop through all the state vectors here. In practice
+    // libdogleg is meant to be applied to sparse problems, where this internal
+    // loop would be MUCH shorter than Nstate long
+    double j[Nstate] = {
+      p[1]*allx[i]*allx[i],
+      p[0]*allx[i]*allx[i] + p[2] * ally[i]*ally[i],
+      p[1] * ally[i]*ally[i] + allx[i]*ally[i],
+      allx[i],
+      ally[i],
+      1.0 };
+
+    for(int k=0; k<Nstate; k++)
+      xtJ[k] += x*j[k];
+
+    // JtJ = sum(outer(j,j))
+    int iJtJ = 0;
+    for(int k=0; k<Nstate; k++)
+      for(int l=k; l<Nstate; l++, iJtJ++)
+        JtJ[iJtJ] += j[k]*j[l];
+  }
+
+  JtJ_format->packed = true;
+  JtJ_format->upper  = true;
+}
+
+
 
 #define GREEN       "\x1b[32m"
 #define RED         "\x1b[31m"
@@ -181,7 +240,7 @@ static void optimizerCallback_dense(const double*   p,
 int main(int argc, char* argv[] )
 {
   const char* usage =
-    "Usage: %s [--check] [--diag vnlog|human] [--test-gradients] sparse|dense\n";
+    "Usage: %s [--check] [--diag vnlog|human] [--test-gradients] sparse|dense|dense-products\n";
 
   struct option opts[] = {
     { "diag",           required_argument, NULL, 'd' },
@@ -191,7 +250,7 @@ int main(int argc, char* argv[] )
     {}
   };
 
-  bool is_sparse      = false;
+  dogleg_solve_type_t solve_type = DOGLEG_SPARSE;
   bool test_gradients = false;
   bool check          = false;
   int  debug          = 0;
@@ -242,17 +301,16 @@ int main(int argc, char* argv[] )
   const int Nargs_remaining = argc-optind;
   if( Nargs_remaining != 1 )
   {
-    fprintf(stderr, "Need exactly 1 non-option argument: 'sparse' or 'dense'. Got %d\n\n",Nargs_remaining);
+    fprintf(stderr, "Need exactly 1 non-option argument: 'sparse' or 'dense' or 'dense-products'. Got %d\n\n",Nargs_remaining);
     fprintf(stderr, usage, argv[0]);
     return 1;
   }
-  if( 0 == strcmp(argv[optind], "dense") )
-    is_sparse = false;
-  else if( 0 == strcmp(argv[optind], "sparse") )
-    is_sparse = true;
+  if(      0 == strcmp(argv[optind], "sparse")         ) solve_type = DOGLEG_SPARSE;
+  else if( 0 == strcmp(argv[optind], "dense")          ) solve_type = DOGLEG_DENSE;
+  else if( 0 == strcmp(argv[optind], "dense-products") ) solve_type = DOGLEG_DENSE_PRODUCTS;
   else
   {
-    fprintf(stderr, "The final argument must be 'sparse' or 'dense'\n\n");
+    fprintf(stderr, "The final argument must be 'sparse' or 'dense' or 'dense-products'\n\n");
     fprintf(stderr, usage, argv[0]);
     return 1;
   }
@@ -265,10 +323,9 @@ int main(int argc, char* argv[] )
 
   if(!check)
   {
-    if(is_sparse)
-      fprintf(stderr, "Using SPARSE math\n");
-    else
-      fprintf(stderr, "Using DENSE math\n");
+    if(      solve_type == DOGLEG_SPARSE)         fprintf(stderr, "Using SPARSE math\n");
+    else if( solve_type == DOGLEG_DENSE)          fprintf(stderr, "Using DENSE math\n");
+    else if( solve_type == DOGLEG_DENSE_PRODUCTS) fprintf(stderr, "Using DENSE-PRODUCTS math\n");
   }
 
 
@@ -311,10 +368,12 @@ int main(int argc, char* argv[] )
     for(int i=0; i<Nstate; i++)
     {
       fprintf(stderr, "checking gradients for variable %d\n", i);
-      if( is_sparse )
+      if(      solve_type == DOGLEG_SPARSE         )
         dogleg_testGradient(i, p, Nstate, Nmeasurements, Jnnz, &optimizerCallback, NULL);
-      else
+      else if( solve_type == DOGLEG_DENSE          )
         dogleg_testGradient_dense(i, p, Nstate, Nmeasurements, &optimizerCallback_dense, NULL);
+      else if( solve_type == DOGLEG_DENSE_PRODUCTS )
+        dogleg_testGradient_dense_products(i, p, Nstate, Nmeasurements, &optimizerCallback_dense_products, NULL);
     }
     return 0;
   }
@@ -323,14 +382,18 @@ int main(int argc, char* argv[] )
     fprintf(stderr, "SOLVING:\n");
 
   double optimum;
-  if( is_sparse )
+  if(      solve_type == DOGLEG_SPARSE         )
     optimum = dogleg_optimize2(p, Nstate, Nmeasurements, Jnnz,
                                &optimizerCallback, NULL,
                                &dogleg_parameters, NULL);
-  else
+  else if( solve_type == DOGLEG_DENSE         )
     optimum = dogleg_optimize_dense2(p, Nstate, Nmeasurements,
                                      &optimizerCallback_dense, NULL,
                                      &dogleg_parameters, NULL);
+  else if( solve_type == DOGLEG_DENSE_PRODUCTS )
+    optimum = dogleg_optimize_dense_products(p, Nstate, Nmeasurements,
+                                             &optimizerCallback_dense_products, NULL,
+                                             &dogleg_parameters, NULL);
 
   if(check)
   {
