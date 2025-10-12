@@ -583,7 +583,7 @@ int dpptrs_(char* uplo, int* n, int* nrhs,
 bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(point->have_updateGN_and_factorization)
+  if(point->have_factorization)
     return true;
 
   if( ctx->solve_type == DOGLEG_SPARSE )
@@ -715,13 +715,14 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
     }
     point->have_JtJ = false; // factorization_dense now has the cholesky factor of JtJ
   }
+  ctx->have_factorization = true;
   return true;
 }
 
 static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
 {
   // I already have this data, so don't need to recompute
-  if(!point->have_updateGN_and_factorization)
+  if(!point->have_updateGN)
   {
     if(!dogleg_computeJtJfactorization(point, ctx))
       return false;
@@ -783,7 +784,7 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     }
 
     SAY_IF_VERBOSE( "gn step size %.6g", sqrt(point->norm2_updateGN));
-    point->have_updateGN_and_factorization = true;
+    point->have_updateGN = true;
   }
 
   if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
@@ -795,7 +796,7 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
 static const double* updateGN_at_point(const dogleg_operatingPoint_t* point,
                                        const dogleg_solverContext_t* ctx)
 {
-  if(!point->have_updateGN_and_factorization)
+  if(!point->have_updateGN)
     return NULL;
 
   switch(ctx->solve_type)
@@ -1189,7 +1190,7 @@ static bool evaluateStep_adjustTrustRegion(// out
     // first
     if( !before->didStepToEdgeOfTrustRegion )
     {
-      if(!before->have_updateGN_and_factorization)
+      if(!before->have_updateGN)
       {
         SAY("ERROR: In %s() updateGN should already have been computed. This is a bug", __func__);
         return false;

@@ -96,18 +96,15 @@ typedef struct
   {
     int dummy_bits[3];
     struct {
-      bool have_updateCauchy               : 1; // and the norm2
-      bool have_updateGN_and_factorization : 1; // and the norm2 and the factorization
-      bool have_x                          : 1; // just x; norm2_x is always valid
-      bool have_J                          : 1; // Jt or J_dense
-      bool have_Jtx                        : 1;
-
-      // Used for dense_products only. If true, factorization_dense is JtJ. If
-      // false, factorization_dense is the cholesky factor of JtJ, as reported
-      // by dpptrf()
-      bool have_JtJ                        : 1;
-      bool have_step_to_here               : 1; // and the norm2
-      bool didStepToEdgeOfTrustRegion      : 1;
+      bool have_updateCauchy          : 1; // and the norm2
+      bool have_updateGN              : 1; // and the norm2 and the factorization
+      bool have_factorization         : 1; // and the norm2 and the factorization
+      bool have_x                     : 1; // just x; norm2_x is always valid
+      bool have_J                     : 1; // Jt or J_dense
+      bool have_Jtx                   : 1;
+      bool have_JtJ                   : 1;
+      bool have_step_to_here          : 1; // and the norm2
+      bool didStepToEdgeOfTrustRegion : 1;
     };
   };
 
