@@ -71,10 +71,13 @@ typedef struct
   // have been computed yet.
   double*         x;
   double          norm2_x;
+  // This is a union. DOGLEG_DENSE_PRODUCTS has JtJ, but no J. DOGLEG_SPARSE and
+  // DOGLEG_DENSE has just J
   union
   {
     cholmod_sparse* Jt;
     double*         J_dense; // row-first: grad0, grad1, grad2, ...
+    double*         JtJ;     // possibly one packed triangle of a symmetric matrix
   };
   double*         Jt_x;
 

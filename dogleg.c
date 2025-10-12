@@ -295,6 +295,32 @@ static double norm2_mul_matrix_vector(const double* A, const double* x, int Nrow
   return result;
 }
 
+// A is an (N,N) symmetric patrix. Stored row-first upper-triangle-only
+static double mul_xt_Apacked_x(const double* x,
+                               const double* A,
+                               const int N)
+{
+  double s = 0.0;
+  int ipacked = 0;
+  for(int i=0; i<N; i++)
+  {
+    // [i,i]
+    s +=
+      A[ipacked++] *
+      x[i] *
+      x[i];
+
+    // [i,j] and [j,i]
+    for(int j=i+1; j<N; j++, ipacked++)
+      s +=
+        2. *
+        A[ipacked] *
+        x[j] *
+        x[i];
+  }
+  return s;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // routines for gradient testing
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -388,6 +414,7 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
   }
   else if(f_dense_products != NULL)
   {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
     // d(Jtx)/dp ~ Jt dx/dp ~ JtJ
     fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
     exit(1);
@@ -410,6 +437,7 @@ void _dogleg_testGradient(unsigned int var, const double* p0,
       g_reported = (getGrad_dense(var, i, J_dense0, Nstate) + getGrad_dense(var, i, J_dense, Nstate)) / 2.0;
     else
     {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
       fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
       exit(1);
     }
@@ -535,25 +563,9 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
 
         // JtJ is assumed to be packed, upper-triangular. That's the only thing
         // I support for now
-        const double* JtJ_packed = ctx->factorization_dense;
-        norm2_J_Jt_x = 0.0;
-        int i_JtJ_packed = 0;
-        for(int i=0; i<ctx->Nstate; i++)
-        {
-          // [i,i]
-          norm2_J_Jt_x +=
-            JtJ_packed[i_JtJ_packed++] *
-            point->Jt_x[i] *
-            point->Jt_x[i];
-
-          // [i,j] and [j,i]
-          for(int j=i+1; j<ctx->Nstate; j++, i_JtJ_packed++)
-            norm2_J_Jt_x +=
-              2. *
-              JtJ_packed[i_JtJ_packed] *
-              point->Jt_x[j] *
-              point->Jt_x[i];
-        }
+        norm2_J_Jt_x = mul_xt_Apacked_x(point->Jt_x,
+                                        point->JtJ,
+                                        ctx->Nstate);
         break;
     }
 
@@ -625,50 +637,76 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
                       ctx->factorization->minor, ctx->Nstate, ctx->lambda);
     }
   }
-  else if( ctx->solve_type == DOGLEG_DENSE )
+  else
   {
-    if(!point->have_J)
+    if( ctx->solve_type == DOGLEG_DENSE )
     {
-      SAY("%s() needs J, but it isn't available", __func__);
-      return false;
+      if(!point->have_J)
+      {
+        SAY("%s() needs J, but it isn't available", __func__);
+        return false;
+      }
+    }
+    else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+    {
+      if(!point->have_JtJ)
+      {
+        SAY("%s() needs JtJ, but it isn't available", __func__);
+        return false;
+      }
     }
 
     while(1)
     {
-      // I construct my JtJ. JtJ is packed and stored row-first. I have two
-      // equivalent implementations. The one enabled here is maybe a bit faster,
-      // but it's definitely clearer
-#if 1
-      memset(ctx->factorization_dense,
-             0,
-             ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
-      for(int i=0; i<ctx->Nmeasurements; i++)
-        accum_outerproduct_packed( ctx->factorization_dense, &point->J_dense[ctx->Nstate*i],
-                                   ctx->Nstate );
-      if( ctx->lambda > 0.0 )
+      // I construct my JtJ. I write it into factorization_dense. dpptrf_()
+      // factors it in-place
+      if( ctx->solve_type == DOGLEG_DENSE )
       {
-        int iJtJ=0;
+        // JtJ is packed and stored row-first. I have two equivalent
+        // implementations. The one enabled here is maybe a bit faster, but it's
+        // definitely clearer
+#if 1
+        memset(ctx->factorization_dense,
+               0,
+               ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
+        for(int i=0; i<ctx->Nmeasurements; i++)
+          accum_outerproduct_packed( ctx->factorization_dense, &point->J_dense[ctx->Nstate*i],
+                                     ctx->Nstate );
+        if( ctx->lambda > 0.0 )
+        {
+          int iJtJ=0;
+          for(int i1=0; i1<ctx->Nstate; i1++)
+          {
+            ctx->factorization_dense[iJtJ] += ctx->lambda;
+            iJtJ                           += ctx->Nstate-i1;
+          }
+        }
+#else
+        int iJtJ = 0;
         for(int i1=0; i1<ctx->Nstate; i1++)
         {
+#error this does not work. overwritten in the following loop
           ctx->factorization_dense[iJtJ] += ctx->lambda;
-          iJtJ                           += ctx->Nstate-i1;
+
+          for(int i0=i1; i0<ctx->Nstate; i0++, iJtJ++)
+            ctx->factorization_dense[iJtJ] = inner_withstride( &point->J_dense[i0],
+                                                               &point->J_dense[i1],
+                                                               ctx->Nmeasurements,
+                                                               ctx->Nstate);
         }
-      }
-#else
-      int iJtJ = 0;
-      for(int i1=0; i1<ctx->Nstate; i1++)
-      {
-        #error this does not work. overwritten in the following loop
-        ctx->factorization_dense[iJtJ] += ctx->lambda;
-
-        for(int i0=i1; i0<ctx->Nstate; i0++, iJtJ++)
-          ctx->factorization_dense[iJtJ] = inner_withstride( &point->J_dense[i0],
-                                                             &point->J_dense[i1],
-                                                             ctx->Nmeasurements,
-                                                             ctx->Nstate);
-      }
 #endif
-
+      }
+      else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+      {
+        memcpy(ctx->factorization_dense,
+               point->JtJ,
+               ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
+      }
+      else
+      {
+        SAY("Unreachable. This is a bug");
+        return false;
+      }
 
 
       int info;
@@ -679,33 +717,12 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       if( info == 0 )
         break;
 
-      // singular JtJ. Raise lambda and go again
-      if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
-      else                    ctx->lambda *= 10.0;
-
-      SAY_IF_VERBOSE( "singular JtJ. Adding %g I from now on", ctx->lambda);
-    }
-  }
-  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
-  {
-    if(!point->have_JtJ)
-    {
-      SAY("About to factor JtJ, but don't have JtJ");
-      return false;
-    }
-
-    while(1)
-    {
-      int info;
-      dpptrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
-              &info, 1);
-      ASSERT(info >= 0); // we MUST either succeed or see complain of singular
-      // JtJ
-      if( info == 0 )
-        break;
-
-      SAY("ERROR: JtJ overwritten, but I need to re-factorize it. This isn't yet implemented in the dense-products path");
-      return false;
+      if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+      {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
+        SAY("UNINMPLEMENTED: ctx->lambda not used with DOGLEG_DENSE_PRODUCTS, and I don't want to modify the input JtJ");
+        exit(1);
+      }
 
       // singular JtJ. Raise lambda and go again
       if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
@@ -713,9 +730,8 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 
       SAY_IF_VERBOSE( "singular JtJ. Adding %g I from now on", ctx->lambda);
     }
-    point->have_JtJ = false; // factorization_dense now has the cholesky factor of JtJ
   }
-  ctx->have_factorization = true;
+  point->have_factorization = true;
   return true;
 }
 
@@ -766,12 +782,6 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     }
     else
     {
-      if(point->have_JtJ)
-      {
-        SAY("I need to use the factorization of JtJ, but I still have JtJ in factorization_dense");
-        return false;
-      }
-
       memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
       int info;
       dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
@@ -946,7 +956,7 @@ static bool computeCallbackOperatingPoint(// out
                              // out
                              &point->norm2_x,
                              point->Jt_x,
-                             ctx->factorization_dense,
+                             point->JtJ,
                              &JtJ_format,
                              // context
                              ctx->cookie);
@@ -958,7 +968,7 @@ static bool computeCallbackOperatingPoint(// out
 
     // we do NOT have x or J
     point->have_Jtx = true;
-    point->have_JtJ = true; // factorization_dense is JtJ, NOT the cholesky factor
+    point->have_JtJ = true;
   }
 
   // If the largest absolute gradient element is smaller than the threshold,
@@ -1002,7 +1012,7 @@ static bool computeExpectedImprovement(// out
       - norm2_mul_spmatrix_t_densevector(point->Jt, step);
     return true;
   }
-  else
+  else if( ctx->solve_type == DOGLEG_DENSE )
   {
     if(!point->have_J)
     {
@@ -1019,7 +1029,27 @@ static bool computeExpectedImprovement(// out
       - norm2_mul_matrix_vector(point->J_dense, step, ctx->Nmeasurements, ctx->Nstate);
     return true;
   }
-
+  else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
+  {
+    // -2*inner(Jt_x,step) - norm2(J*step) =
+    // = -2*inner(Jt_x,step) - stept JtJ step
+    if(!point->have_JtJ)
+    {
+      SAY("%s() needs JtJ, but it isn't available", __func__);
+      return false;
+    }
+    if(!point->have_Jtx)
+    {
+      SAY("%s() needs Jtx, but it isn't available", __func__);
+      return false;
+    }
+    *expectedImprovement =
+      - 2.0*inner(point->Jt_x, step, ctx->Nstate)
+      - mul_xt_Apacked_x(step,
+                         point->JtJ,
+                         ctx->Nstate);
+    return true;
+  }
   return false;
 }
 
@@ -1338,28 +1368,22 @@ static
 dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
                                              dogleg_solverContext_t* ctx)
 {
-  const bool is_sparse        = ctx->solve_type == DOGLEG_SPARSE;
-  const bool is_dense         = ctx->solve_type == DOGLEG_DENSE;
-  const bool is_dense_product = ctx->solve_type == DOGLEG_DENSE_PRODUCTS;
+  const bool is_sparse         = ctx->solve_type == DOGLEG_SPARSE;
+  const bool is_dense          = ctx->solve_type == DOGLEG_DENSE;
+  const bool is_dense_products = ctx->solve_type == DOGLEG_DENSE_PRODUCTS;
 
   dogleg_operatingPoint_t* point = malloc(sizeof(dogleg_operatingPoint_t));
   ASSERT(point != NULL);
-
-  point->p              = NULL;
-  point->x              = NULL;
-  point->Jt_x           = NULL;
-  point->updateCauchy   = NULL;
-  point->step_to_here   = NULL;
-  point->J_dense        = NULL;
-  point->updateGN_dense = NULL;
+  *point = (dogleg_operatingPoint_t){}; // set everything to NULL
 
   const int Npool =
     ctx->Nstate                                        + // p
-    (is_dense_product ? 0 : ctx->Nmeasurements)        + // x
+    (is_dense_products ? 0 : ctx->Nmeasurements)       + // x
     ctx->Nstate                                        + // Jtx
     ctx->Nstate                                        + // updateCauchy
     ctx->Nstate                                        + // step_to_here
-    (is_dense  ? (ctx->Nmeasurements*ctx->Nstate) : 0) + // J_dense
+    (is_dense          ? (ctx->Nmeasurements*ctx->Nstate) : 0) + // J_dense
+    (is_dense_products ? (ctx->Nstate*(ctx->Nstate+1)/2)  : 0) + // JtJ
     (is_sparse ? 0 : ctx->Nstate);                       // updateGN_dense
 
 
@@ -1372,7 +1396,7 @@ dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
   point->p = &pool[i0];
   i0 += ctx->Nstate;
 
-  if(!is_dense_product)
+  if(!is_dense_products)
   {
     point->x          = &pool[i0];
     i0 += ctx->Nmeasurements;
@@ -1404,6 +1428,11 @@ dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
     {
       point->J_dense = &pool[i0];
       i0 += ctx->Nmeasurements * ctx->Nstate;
+    }
+    else if(is_dense_products)
+    {
+      point->JtJ = &pool[i0];
+      i0 += ctx->Nstate*(ctx->Nstate+1)/2;
     }
 
     point->updateGN_dense = &pool[i0];
@@ -2505,6 +2534,7 @@ bool dogleg_getOutliernessFactors( // output
     result = getOutliernessFactors_dense(factors, scale, featureSize, Nfeatures, NoutlierFeatures, point, ctx);
   else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
   {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
     fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
     exit(1);
   }
@@ -2574,6 +2604,7 @@ bool dogleg_getOutliernessFactors( // output
     }
     else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
     {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
       fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
       exit(1);
     }
@@ -2812,6 +2843,7 @@ double dogleg_getOutliernessTrace_newFeature_sparse(const double*            Jqu
     }
     else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
     {
+#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
       fprintf(stderr, "FINISH IMPLEMENTING DENSE_PRODUCTS\n");
       exit(1);
     }
