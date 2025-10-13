@@ -99,9 +99,6 @@ static void optimizerCallback(const double*   p,
           iJacobian++;                          \
         } while(0)
 
-
-  double norm2_x = 0.0;
-
   for(int i=0; i<Nmeasurements; i++)
   {
     x[i] =
@@ -112,8 +109,6 @@ static void optimizerCallback(const double*   p,
       p[4] *        ally[i] +
       p[5]
       - allm_simulated_noisy[i];
-
-    norm2_x += x[i]*x[i];
 
     // In this sample problem, every measurement depends on every element of the
     // state vector, so I loop through all the state vectors here. In practice
@@ -140,9 +135,6 @@ static void optimizerCallback_dense(const double*   p,
   int iJacobian = 0;
 #define STORE_JACOBIAN(col, g) J[ iJacobian++ ] = g
 
-
-  double norm2_x = 0.0;
-
   for(int i=0; i<Nmeasurements; i++)
   {
     x[i] =
@@ -153,8 +145,6 @@ static void optimizerCallback_dense(const double*   p,
       p[4] *        ally[i] +
       p[5]
       - allm_simulated_noisy[i];
-
-    norm2_x += x[i]*x[i];
 
     // In this sample problem, every measurement depends on every element of the
     // state vector, so I loop through all the state vectors here. In practice
