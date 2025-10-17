@@ -361,6 +361,9 @@ int main(int argc, char* argv[] )
   dogleg_parameters.JtJ_packed = packed;
   dogleg_parameters.JtJ_upper  = upper;
 
+  // This is an easy problem. Should be solvable in this many iterations
+  dogleg_parameters.max_iterations = 8;
+
   double p[Nstate];
 
   // I start solving with all my state variables set to some random noise
