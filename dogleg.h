@@ -267,6 +267,12 @@ void dogleg_setThresholds(double Jt_x, double update, double trustregion);
 // The evaluation function is given in the callback f; this function is passed
 // the given cookie
 //
+// The parameters can be NULL to use the default ones, controlled by
+// dogleg_set...() functions. If given, the dogleg_parameters2_t structure will
+// be used as is: set it up with dogleg_getDefaultParameters(), and modify as
+// needed. This structure needs to exist in memory for the duration of the
+// libdogleg solve
+//
 // If we want to get the full solver state when we're done, a non-NULL
 // returnContext pointer can be given. If this is done then THE USER IS
 // RESPONSIBLE FOR FREEING ITS MEMORY WITH dogleg_freeContext()
