@@ -280,7 +280,6 @@ double dogleg_optimize_dense2(double* p, unsigned int Nstate,
                               const dogleg_parameters2_t* parameters,
                               dogleg_solverContext_t** returnContext);
 double dogleg_optimize_dense_products(double* p, unsigned int Nstate,
-                                      unsigned int Nmeas,
                                       dogleg_callback_dense_products_t* f, void* cookie,
                                       const dogleg_parameters2_t* parameters,
                                       dogleg_solverContext_t** returnContext);

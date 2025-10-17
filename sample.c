@@ -381,7 +381,7 @@ int main(int argc, char* argv[] )
                                      &optimizerCallback_dense, NULL,
                                      &dogleg_parameters, NULL);
   else if( solve_type == DOGLEG_DENSE_PRODUCTS )
-    optimum = dogleg_optimize_dense_products(p, Nstate, Nmeasurements,
+    optimum = dogleg_optimize_dense_products(p, Nstate,
                                              &optimizerCallback_dense_products, NULL,
                                              &dogleg_parameters, NULL);
 
