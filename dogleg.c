@@ -960,21 +960,14 @@ static bool computeCallbackOperatingPoint(// out
   else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
   {
 
-    dogleg_packed_selection_t JtJ_format;
     (*ctx->f_dense_products)(// in
                              point->p,
                              // out
                              &point->norm2_x,
                              point->Jt_x,
                              point->JtJ,
-                             &JtJ_format,
                              // context
                              ctx->cookie);
-    if(!(JtJ_format.packed && JtJ_format.upper))
-    {
-      SAY("dense-products: only packed,upper JtJ is supported at this time");
-      return false;
-    }
 
     // we do NOT have x or J
     point->have_Jtx = true;

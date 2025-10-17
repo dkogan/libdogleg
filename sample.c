@@ -172,8 +172,6 @@ static void optimizerCallback_dense_products(// in
                                                 double*         xtJ,
                                                 // shape (Nstate,Nstate)
                                                 double*         JtJ,
-                                                // TODAY only packed and upper is supported
-                                                dogleg_packed_selection_t* JtJ_format,
                                                 // context
                                                 void*           cookie __attribute__ ((unused)) )
 {
@@ -215,9 +213,6 @@ static void optimizerCallback_dense_products(// in
       for(int l=k; l<Nstate; l++, iJtJ++)
         JtJ[iJtJ] += j[k]*j[l];
   }
-
-  JtJ_format->packed = true;
-  JtJ_format->upper  = true;
 }
 
 
