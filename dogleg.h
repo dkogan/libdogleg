@@ -126,10 +126,11 @@ typedef struct
   int max_iterations;
   union
   {
-    int dogleg_debug;
+    int dogleg_debug; // Don't touch this in new code. Use the bit fields below
     struct
     {
-      int  dummy       : DOGLEG_DEBUG_VNLOG_BIT;
+      bool debug       : 1;
+      int  dummy       : DOGLEG_DEBUG_VNLOG_BIT-1;
       bool debug_vnlog : 1; // in the same spot as dogleg_debug
     };
   };

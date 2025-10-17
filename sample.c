@@ -240,10 +240,11 @@ int main(int argc, char* argv[] )
     {}
   };
 
-  dogleg_solve_type_t solve_type = DOGLEG_SPARSE;
-  bool test_gradients = false;
-  bool check          = false;
-  int  debug          = 0;
+  dogleg_solve_type_t solve_type     = DOGLEG_SPARSE;
+  bool                test_gradients = false;
+  bool                check          = false;
+  bool                debug          = false;
+  bool                debug_vnlog    = false;
 
   int opt;
   do
@@ -262,12 +263,12 @@ int main(int argc, char* argv[] )
     case 'd':
       if(0 == strcmp("vnlog", optarg))
       {
-        debug |= DOGLEG_DEBUG_VNLOG;
+        debug_vnlog = true;
         break;
       }
       if(0 == strcmp("human", optarg))
       {
-        debug |= 1;
+        debug = true;
         break;
       }
       fprintf(stderr, "--diag must be followed by 'vnlog' or 'human'\n");
@@ -326,7 +327,8 @@ int main(int argc, char* argv[] )
 
   dogleg_parameters2_t dogleg_parameters;
   dogleg_getDefaultParameters(&dogleg_parameters);
-  dogleg_parameters.dogleg_debug = debug;
+  dogleg_parameters.debug       = debug;
+  dogleg_parameters.debug_vnlog = debug_vnlog;
 
   double p[Nstate];
 

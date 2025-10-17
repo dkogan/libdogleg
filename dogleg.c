@@ -19,13 +19,11 @@
 #endif
 
 
-// Any non-vnlog bit mask
-#define DOGLEG_DEBUG_OTHER_THAN_VNLOG (~DOGLEG_DEBUG_VNLOG)
 #define SAY_NONEWLINE(fmt, ...) fprintf(stderr, "libdogleg at %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 #define SAY(fmt, ...)           do {  SAY_NONEWLINE(fmt, ## __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
 
 // This REQUIRES that a "dogleg_solverContext_t* ctx" be available
-#define SAY_IF_VERBOSE(fmt,...) do { if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_OTHER_THAN_VNLOG ) SAY(fmt, ##__VA_ARGS__); } while(0)
+#define SAY_IF_VERBOSE(fmt,...) do { if( ctx->parameters->debug && !ctx->parameters->debug_vnlog ) SAY(fmt, ##__VA_ARGS__); } while(0)
 
 // I do this myself because I want this to be active in all build modes, not just !NDEBUG
 #define ASSERT(x) do { if(!(x)) { SAY("ASSERTION FAILED: " #x " is not true"); exit(1); } } while(0)
@@ -39,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 // vnlog debugging stuff
 //
-// This is used if the user calls dogleg_setDebug(DOGLEG_DEBUG_VNLOG | stuff)
+// This is used if the user calls dogleg_setDebug(DOGLEG_DEBUG_VNLOG)
 //////////////////////////////////////////////////////////////////////////////////////////
 #define VNLOG_DEBUG_STEP_TYPE_LIST(_)           \
   _(STEPTYPE_CAUCHY,       "cauchy")            \
@@ -119,7 +117,6 @@ static void vnlog_debug_emit_record(int iteration, int step_accepted)
 #define PARAMETERS_DEFAULT                      \
   {                                             \
     .max_iterations                 = 100,      \
-    .dogleg_debug                   = 0,        \
     .trustregion0                   = 1.0e3,    \
     .trustregion_decrease_factor    = 0.1,      \
     .trustregion_decrease_threshold = 0.25,     \
@@ -140,10 +137,23 @@ void dogleg_getDefaultParameters(dogleg_parameters2_t* parameters)
 // if I ever see a singular JtJ, I factor JtJ + LAMBDA*I from that point on
 #define LAMBDA_INITIAL 1e-10
 
-// these parameters likely should be messed with
 void dogleg_setDebug(int debug)
 {
-  parameters_global.dogleg_debug = debug;
+  if(debug == 0)
+  {
+    parameters_global.debug       = false;
+    parameters_global.debug_vnlog = false;
+  }
+  else if(debug & DOGLEG_DEBUG_VNLOG)
+  {
+    parameters_global.debug       = false;
+    parameters_global.debug_vnlog = true;
+  }
+  else
+  {
+    parameters_global.debug       = true;
+    parameters_global.debug_vnlog = false;
+  }
 }
 void dogleg_setInitialTrustregion(double t)
 {
@@ -578,7 +588,7 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
     SAY_IF_VERBOSE( "cauchy step size %.6g", sqrt(point->norm2_updateCauchy));
   }
 
-  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+  if( ctx->parameters->debug_vnlog )
     vnlog_debug_data.step_len_cauchy = sqrt(point->norm2_updateCauchy);
   return true;
 }
@@ -797,7 +807,7 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     point->have_updateGN = true;
   }
 
-  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+  if( ctx->parameters->debug_vnlog )
     vnlog_debug_data.step_len_gauss_newton = sqrt(point->norm2_updateGN);
 
   return true;
@@ -885,7 +895,7 @@ static bool computeInterpolatedUpdate(double*                  update_dogleg,
   SAY_IF_VERBOSE( "k_cauchy_to_gn %.6g, norm %.6g",
                   k,
                   sqrt(*update_dogleg_lensq));
-  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->debug_vnlog)
   {
     vnlog_debug_data.step_len_interpolated = sqrt(*update_dogleg_lensq);
     vnlog_debug_data.k_cauchy_to_gn        = k;
@@ -1069,7 +1079,7 @@ static bool takeStepFrom(// out
                          dogleg_solverContext_t* ctx)
 {
   SAY_IF_VERBOSE( "taking step with trustregion %.6g", trustregion);
-  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->debug_vnlog)
   {
     vnlog_debug_data.trustregion_before = trustregion;
     vnlog_debug_data.norm2x_before      = pointFrom->norm2_x;
@@ -1081,7 +1091,7 @@ static bool takeStepFrom(// out
   if(pointFrom->norm2_updateCauchy >= trustregion*trustregion)
   {
     SAY_IF_VERBOSE( "taking cauchy step");
-    if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+    if(ctx->parameters->debug_vnlog)
     {
       vnlog_debug_data.step_type = STEPTYPE_CAUCHY;
       vnlog_debug_data.step_len  = vnlog_debug_data.step_len_cauchy;
@@ -1109,7 +1119,7 @@ static bool takeStepFrom(// out
     if(pointFrom->norm2_updateGN <= trustregion*trustregion)
     {
       SAY_IF_VERBOSE( "taking GN step");
-      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->debug_vnlog)
       {
         vnlog_debug_data.step_type = STEPTYPE_GAUSSNEWTON;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_gauss_newton;
@@ -1136,7 +1146,7 @@ static bool takeStepFrom(// out
         return false;
 
       pointFrom->didStepToEdgeOfTrustRegion = true;
-      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->debug_vnlog)
       {
         vnlog_debug_data.step_type = STEPTYPE_INTERPOLATED;
         vnlog_debug_data.step_len  = vnlog_debug_data.step_len_interpolated;
@@ -1153,7 +1163,7 @@ static bool takeStepFrom(// out
                                  pointFrom,
                                  ctx))
     return false;
-  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->debug_vnlog)
   {
     vnlog_debug_data.expected_improvement = *expectedImprovement;
 
@@ -1202,7 +1212,7 @@ static bool evaluateStep_adjustTrustRegion(// out
   double rho = observedImprovement / expectedImprovement;
   SAY_IF_VERBOSE( "observed/expected improvement: %.6g/%.6g. rho = %.6g",
                   observedImprovement, expectedImprovement, rho);
-  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->debug_vnlog)
   {
     vnlog_debug_data.observed_improvement = observedImprovement;
     vnlog_debug_data.rho                  = rho;
@@ -1237,7 +1247,7 @@ static bool evaluateStep_adjustTrustRegion(// out
 
     *trustregion *= ctx->parameters->trustregion_increase_factor;
   }
-  if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+  if(ctx->parameters->debug_vnlog)
     vnlog_debug_data.trustregion_after = *trustregion;
 
   *accept = (rho > 0.0);
@@ -1291,7 +1301,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       // negative expectedImprovement is used to indicate that we're done
       if(expectedImprovement < 0.0)
       {
-        if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+        if( ctx->parameters->debug_vnlog )
           vnlog_debug_emit_record(stepCount, 1);
         return stepCount;
       }
@@ -1303,7 +1313,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
         return -1;
 
       SAY_IF_VERBOSE( "Evaluated operating point with norm2_x %.6g", ctx->afterStep->norm2_x);
-      if(ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG)
+      if(ctx->parameters->debug_vnlog)
         vnlog_debug_data.norm2x_after = ctx->afterStep->norm2_x;
 
       bool accept_step;
@@ -1320,7 +1330,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       {
         SAY_IF_VERBOSE( "accepted step");
 
-        if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+        if( ctx->parameters->debug_vnlog )
           vnlog_debug_emit_record(stepCount, 1);
         stepCount++;
 
@@ -1343,7 +1353,7 @@ static int runOptimizer(dogleg_solverContext_t* ctx)
       }
 
       SAY_IF_VERBOSE( "rejected step");
-      if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+      if( ctx->parameters->debug_vnlog )
         vnlog_debug_emit_record(stepCount, 0);
 
       // This step was rejected. check if the new trust region size is small
@@ -1570,7 +1580,7 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
       return -1.0;
   }
 
-  if( ctx->parameters->dogleg_debug & DOGLEG_DEBUG_VNLOG )
+  if( ctx->parameters->debug_vnlog )
     vnlog_debug_emit_legend();
 
   if( returnContext != NULL )
