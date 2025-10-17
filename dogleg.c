@@ -211,7 +211,7 @@ static double inner_withstride(const double* x, const double* y, unsigned int n,
 }
 // JtJ += outer(j,j). JtJ is packed, upper-triangular (lower-triangular as far
 // as LAPACK is concerned)
-static void accum_outerproduct_packed( double* JtJ, const double* j, int n )
+static void accum_outerproduct_packed_upper( double* JtJ, const double* j, int n )
 {
   int iJtJ=0;
   for(int i1=0; i1<n; i1++)
@@ -306,9 +306,9 @@ static double norm2_mul_matrix_vector(const double* A, const double* x, int Nrow
 }
 
 // A is an (N,N) symmetric patrix. Stored row-first upper-triangle-only
-static double mul_xt_Apacked_x(const double* x,
-                               const double* A,
-                               const int N)
+static double mul_xt_Apacked_upper_x(const double* x,
+                                     const double* A,
+                                     const int N)
 {
   double s = 0.0;
   int ipacked = 0;
@@ -573,9 +573,9 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
 
         // JtJ is assumed to be packed, upper-triangular. That's the only thing
         // I support for now
-        norm2_J_Jt_x = mul_xt_Apacked_x(point->Jt_x,
-                                        point->JtJ,
-                                        ctx->Nstate);
+        norm2_J_Jt_x = mul_xt_Apacked_upper_x(point->Jt_x,
+                                              point->JtJ,
+                                              ctx->Nstate);
         break;
     }
 
@@ -680,8 +680,8 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
                0,
                ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
         for(int i=0; i<ctx->Nmeasurements; i++)
-          accum_outerproduct_packed( ctx->factorization_dense, &point->J_dense[ctx->Nstate*i],
-                                     ctx->Nstate );
+          accum_outerproduct_packed_upper( ctx->factorization_dense, &point->J_dense[ctx->Nstate*i],
+                                           ctx->Nstate );
         if( ctx->lambda > 0.0 )
         {
           int iJtJ=0;
@@ -1048,9 +1048,9 @@ static bool computeExpectedImprovement(// out
     }
     *expectedImprovement =
       - 2.0*inner(point->Jt_x, step, ctx->Nstate)
-      - mul_xt_Apacked_x(step,
-                         point->JtJ,
-                         ctx->Nstate);
+      - mul_xt_Apacked_upper_x(step,
+                               point->JtJ,
+                               ctx->Nstate);
     return true;
   }
   return false;
