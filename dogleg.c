@@ -619,10 +619,9 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
 // LAPACK prototypes for a packed cholesky factorization and a linear solve
 // using that factorization, respectively
 int dpptrf_(char* uplo, int* n, double* ap,
-            int* info, int uplo_len);
+            int* info);
 int dpptrs_(char* uplo, int* n, int* nrhs,
-            double* ap, double* b, int* ldb, int* info,
-            int uplo_len);
+            double* ap, double* b, int* ldb, int* info);
 // same but for a full (not packed) matrix
 int dpotrf_(char* uplo, int* n, double* a,
             int* lda,
@@ -760,12 +759,12 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
           (ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper) )
       {
         dpptrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
-                &info, 1);
+                &info);
       }
       else if(ctx->parameters->JtJ_packed && !ctx->parameters->JtJ_upper)
       {
         dpptrf_(&(char){'U'}, &(int){ctx->Nstate}, ctx->factorization_dense,
-                &info, 1);
+                &info);
       }
       else
       {
@@ -854,13 +853,13 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
       {
         dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
                 ctx->factorization_dense,
-                point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+                point->updateGN_dense, &(int){ctx->Nstate}, &info);
       }
       else if(ctx->parameters->JtJ_packed && !ctx->parameters->JtJ_upper)
       {
         dpptrs_(&(char){'U'}, &(int){ctx->Nstate}, &(int){1},
                 ctx->factorization_dense,
-                point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+                point->updateGN_dense, &(int){ctx->Nstate}, &info);
       }
       else
       {
@@ -1829,7 +1828,7 @@ static bool pseudoinverse_J_dense(// output
   dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &NmeasInChunk,
           ctx->factorization_dense,
           out,
-          &(int){ctx->Nstate}, &info, 1);
+          &(int){ctx->Nstate}, &info);
   return info==0;
 }
 
