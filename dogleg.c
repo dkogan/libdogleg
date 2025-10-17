@@ -331,6 +331,21 @@ static double mul_xt_Apacked_upper_x(const double* x,
   return s;
 }
 
+// A is an (N,N) symmetric patrix
+static double mul_xt_A_x(const double* x,
+                         const double* A,
+                         const int N)
+{
+  double s = 0.0;
+  for(int i=0; i<N; i++)
+    for(int j=0; j<N; j++)
+      s +=
+        A[i*N + j] *
+        x[i] *
+        x[j];
+  return s;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // routines for gradient testing
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -571,11 +586,19 @@ static bool compute_updateCauchy(dogleg_operatingPoint_t* point,
           return false;
         }
 
-        // JtJ is assumed to be packed, upper-triangular. That's the only thing
-        // I support for now
-        norm2_J_Jt_x = mul_xt_Apacked_upper_x(point->Jt_x,
-                                              point->JtJ,
-                                              ctx->Nstate);
+        if(ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper)
+          norm2_J_Jt_x = mul_xt_Apacked_upper_x(point->Jt_x,
+                                                point->JtJ,
+                                                ctx->Nstate);
+        else if(!ctx->parameters->JtJ_packed)
+          norm2_J_Jt_x = mul_xt_A_x(point->Jt_x,
+                                    point->JtJ,
+                                    ctx->Nstate);
+        else
+        {
+          SAY("Today I only support JtJ that are unpacked || (packed,upper)");
+          return false;
+        }
         break;
     }
 
@@ -600,6 +623,13 @@ int dpptrf_(char* uplo, int* n, double* ap,
 int dpptrs_(char* uplo, int* n, int* nrhs,
             double* ap, double* b, int* ldb, int* info,
             int uplo_len);
+// same but for a full (not packed) matrix
+int dpotrf_(char* uplo, int* n, double* a,
+            int* lda,
+            int* info);
+int dpotrs_(char* uplo, int* n, int* nrhs,
+            double* a, int* lda,
+            double* b, int* ldb, int* info);
 
 
 bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solverContext_t* ctx)
@@ -708,9 +738,14 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       }
       else if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
       {
+        const int size =
+          ctx->parameters->JtJ_packed ?
+          (ctx->Nstate * (ctx->Nstate+1) / 2) :
+          (ctx->Nstate * ctx->Nstate);
+
         memcpy(ctx->factorization_dense,
                point->JtJ,
-               ctx->Nstate*(ctx->Nstate+1)/2*sizeof(ctx->factorization_dense[0]));
+               size*sizeof(ctx->factorization_dense[0]));
       }
       else
       {
@@ -720,8 +755,27 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 
 
       int info;
-      dpptrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
-              &info, 1);
+
+      if( ctx->solve_type == DOGLEG_DENSE ||
+          (ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper) )
+      {
+        dpptrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
+                &info, 1);
+      }
+      else if(ctx->parameters->JtJ_packed && !ctx->parameters->JtJ_upper)
+      {
+        dpptrf_(&(char){'U'}, &(int){ctx->Nstate}, ctx->factorization_dense,
+                &info, 1);
+      }
+      else
+      {
+        // Unpacked. I assume both triangles are stored, so both L and U work
+        // here
+        dpotrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
+                &(int){ctx->Nstate},
+                &info);
+      }
+
       ASSERT(info >= 0); // we MUST either succeed or see complain of singular
       // JtJ
       if( info == 0 )
@@ -794,9 +848,29 @@ static bool compute_updateGN(dogleg_operatingPoint_t* point, dogleg_solverContex
     {
       memcpy( point->updateGN_dense, point->Jt_x, ctx->Nstate * sizeof(point->updateGN_dense[0]));
       int info;
-      dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
-              ctx->factorization_dense,
-              point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+
+      if( ctx->solve_type == DOGLEG_DENSE ||
+          (ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper) )
+      {
+        dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
+                ctx->factorization_dense,
+                point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+      }
+      else if(ctx->parameters->JtJ_packed && !ctx->parameters->JtJ_upper)
+      {
+        dpptrs_(&(char){'U'}, &(int){ctx->Nstate}, &(int){1},
+                ctx->factorization_dense,
+                point->updateGN_dense, &(int){ctx->Nstate}, &info, 1);
+      }
+      else
+      {
+        // Unpacked. I assume both triangles are stored, so both L and U work
+        // here, but it has to match whatever I used when I called dpotrf_()
+        dpotrs_(&(char){'L'}, &(int){ctx->Nstate}, &(int){1},
+                ctx->factorization_dense, &(int){ctx->Nstate},
+                point->updateGN_dense, &(int){ctx->Nstate}, &info);
+      }
+
       vec_negate(point->updateGN_dense,
                  ctx->Nstate); // should be more efficient than this later
 
@@ -1046,11 +1120,25 @@ static bool computeExpectedImprovement(// out
       SAY("%s() needs Jtx, but it isn't available", __func__);
       return false;
     }
-    *expectedImprovement =
-      - 2.0*inner(point->Jt_x, step, ctx->Nstate)
-      - mul_xt_Apacked_upper_x(step,
-                               point->JtJ,
-                               ctx->Nstate);
+
+    if(ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper)
+      *expectedImprovement =
+        - 2.0*inner(point->Jt_x, step, ctx->Nstate)
+        - mul_xt_Apacked_upper_x(step,
+                                 point->JtJ,
+                                 ctx->Nstate);
+    else if(!ctx->parameters->JtJ_packed)
+      *expectedImprovement =
+        - 2.0*inner(point->Jt_x, step, ctx->Nstate)
+        - mul_xt_A_x(step,
+                     point->JtJ,
+                     ctx->Nstate);
+    else
+    {
+      SAY("Today I only support JtJ that are unpacked || (packed,upper)");
+      return false;
+    }
+
     return true;
   }
   return false;
@@ -1374,6 +1462,13 @@ dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
   const bool is_sparse         = ctx->solve_type == DOGLEG_SPARSE;
   const bool is_dense          = ctx->solve_type == DOGLEG_DENSE;
   const bool is_dense_products = ctx->solve_type == DOGLEG_DENSE_PRODUCTS;
+  const bool is_packed         = ctx->parameters->JtJ_packed;
+
+  const int JtJ_size =
+    is_packed ?
+    (ctx->Nstate*(ctx->Nstate+1)/2) :
+    ctx->Nstate*ctx->Nstate;
+
 
   dogleg_operatingPoint_t* point = malloc(sizeof(dogleg_operatingPoint_t));
   ASSERT(point != NULL);
@@ -1386,7 +1481,7 @@ dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
     ctx->Nstate                                        + // updateCauchy
     ctx->Nstate                                        + // step_to_here
     (is_dense          ? (ctx->Nmeasurements*ctx->Nstate) : 0) + // J_dense
-    (is_dense_products ? (ctx->Nstate*(ctx->Nstate+1)/2)  : 0) + // JtJ
+    (is_dense_products ? JtJ_size : 0)                 + // JtJ
     (is_sparse ? 0 : ctx->Nstate);                       // updateGN_dense
 
 
@@ -1435,7 +1530,7 @@ dogleg_operatingPoint_t* allocOperatingPoint(unsigned int NJnnz,
     else if(is_dense_products)
     {
       point->JtJ = &pool[i0];
-      i0 += ctx->Nstate*(ctx->Nstate+1)/2;
+      i0 += JtJ_size;
     }
 
     point->updateGN_dense = &pool[i0];
@@ -1592,10 +1687,15 @@ static double _dogleg_optimize(double* p, unsigned int Nstate,
   if(ctx->solve_type == DOGLEG_DENSE ||
      ctx->solve_type == DOGLEG_DENSE_PRODUCTS)
   {
+    const int size =
+      (ctx->solve_type == DOGLEG_DENSE ||
+       ctx->parameters->JtJ_packed) ?
+      (Nstate * (Nstate+1) / 2) :
+      (Nstate * Nstate);
+
     // This needs to be big-enough to store an upper triangle of a symmetrix N*N
     // matrix
-    ctx->factorization_dense = malloc( Nstate * (Nstate+1) / 2 *
-                                       sizeof( ctx->factorization_dense[0]));
+    ctx->factorization_dense = malloc( size * sizeof( ctx->factorization_dense[0]));
     if(ctx->factorization_dense == NULL)
     {
       SAY("Couldn't malloc factorization_dense");
@@ -1725,6 +1825,7 @@ static bool pseudoinverse_J_dense(// output
   memcpy(out,
          &point->J_dense[i_meas0*ctx->Nstate],
          NmeasInChunk*ctx->Nstate*sizeof(double));
+  SAY("Warning. This assumes dense, packed storage");
   dpptrs_(&(char){'L'}, &(int){ctx->Nstate}, &NmeasInChunk,
           ctx->factorization_dense,
           out,

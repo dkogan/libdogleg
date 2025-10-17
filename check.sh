@@ -9,11 +9,12 @@ RED="\x1b[31m"
 COLOR_RESET="\x1b[0m"
 
 
-./sample --check sparse          || anyfailed=1
-./sample --check dense           || anyfailed=1
-./sample --check dense-products  || anyfailed=1
+./sample --check sparse                       || anyfailed=1
+./sample --check dense                        || anyfailed=1
+./sample --check dense-products-packed-upper  || anyfailed=1
+./sample --check dense-products-unpacked      || anyfailed=1
 
-./test-misc                      || anyfailed=1
+./test-misc || anyfailed=1
 
 if [[ -n "$anyfailed" ]]; then
     echo -e $RED"Some tests failed"$COLOR_RESET

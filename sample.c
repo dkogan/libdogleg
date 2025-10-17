@@ -173,12 +173,19 @@ static void optimizerCallback_dense_products(// in
                                                 // shape (Nstate,Nstate)
                                                 double*         JtJ,
                                                 // context
-                                                void*           cookie __attribute__ ((unused)) )
+                                                void*           cookie)
 {
+  const dogleg_parameters2_t* dogleg_parameters = (const dogleg_parameters2_t*)cookie;
+
+
   *norm2x = 0.0;
 
+  const int size = (dogleg_parameters->JtJ_packed) ?
+    ((Nstate+1)*(Nstate)/2) :
+    (Nstate*Nstate);
+
   memset(xtJ, 0, Nstate*sizeof(xtJ[0]));
-  memset(JtJ, 0, (Nstate+1)*(Nstate)/2*sizeof(JtJ[0]));
+  memset(JtJ, 0, size*sizeof(JtJ[0]));
   for(int i=0; i<Nmeasurements; i++)
   {
     double x =
@@ -208,10 +215,24 @@ static void optimizerCallback_dense_products(// in
       xtJ[k] += x*j[k];
 
     // JtJ = sum(outer(j,j))
-    int iJtJ = 0;
-    for(int k=0; k<Nstate; k++)
-      for(int l=k; l<Nstate; l++, iJtJ++)
-        JtJ[iJtJ] += j[k]*j[l];
+    if(dogleg_parameters->JtJ_packed && dogleg_parameters->JtJ_upper)
+    {
+      int iJtJ = 0;
+      for(int k=0; k<Nstate; k++)
+        for(int l=k; l<Nstate; l++, iJtJ++)
+          JtJ[iJtJ] += j[k]*j[l];
+    }
+    else if(!dogleg_parameters->JtJ_packed)
+    {
+      for(int k=0; k<Nstate; k++)
+        for(int l=0; l<Nstate; l++)
+          JtJ[k*Nstate + l] += j[k]*j[l];
+    }
+    else
+    {
+      fprintf(stderr, "dense-products: only packed,upper and unpacked are supported right now\n");
+      exit(1);
+    }
   }
 }
 
@@ -225,7 +246,7 @@ static void optimizerCallback_dense_products(// in
 int main(int argc, char* argv[] )
 {
   const char* usage =
-    "Usage: %s [--check] [--diag vnlog|human] [--test-gradients] sparse|dense|dense-products\n";
+    "Usage: %s [--check] [--diag vnlog|human] [--test-gradients] sparse|dense|dense-products-packed-upper|dense-products-unpacked\n";
 
   struct option opts[] = {
     { "diag",           required_argument, NULL, 'd' },
@@ -240,6 +261,8 @@ int main(int argc, char* argv[] )
   bool                check          = false;
   bool                debug          = false;
   bool                debug_vnlog    = false;
+  bool                packed         = false;
+  bool                upper          = false;
 
   int opt;
   do
@@ -287,16 +310,26 @@ int main(int argc, char* argv[] )
   const int Nargs_remaining = argc-optind;
   if( Nargs_remaining != 1 )
   {
-    fprintf(stderr, "Need exactly 1 non-option argument: 'sparse' or 'dense' or 'dense-products'. Got %d\n\n",Nargs_remaining);
+    fprintf(stderr, "Need exactly 1 non-option argument: 'sparse' or 'dense' or 'dense-products-...'. Got %d\n\n",Nargs_remaining);
     fprintf(stderr, usage, argv[0]);
     return 1;
   }
   if(      0 == strcmp(argv[optind], "sparse")         ) solve_type = DOGLEG_SPARSE;
   else if( 0 == strcmp(argv[optind], "dense")          ) solve_type = DOGLEG_DENSE;
-  else if( 0 == strcmp(argv[optind], "dense-products") ) solve_type = DOGLEG_DENSE_PRODUCTS;
+  else if( 0 == strcmp(argv[optind], "dense-products-packed-upper") )
+  {
+    solve_type = DOGLEG_DENSE_PRODUCTS;
+    packed = true;
+    upper  = true;
+  }
+  else if( 0 == strcmp(argv[optind], "dense-products-unpacked") )
+  {
+    solve_type = DOGLEG_DENSE_PRODUCTS;
+    packed = false;
+  }
   else
   {
-    fprintf(stderr, "The final argument must be 'sparse' or 'dense' or 'dense-products'\n\n");
+    fprintf(stderr, "The final argument must be 'sparse' or 'dense' or 'dense-products-packed-upper' or 'dense-products-unpacked'\n\n");
     fprintf(stderr, usage, argv[0]);
     return 1;
   }
@@ -324,6 +357,9 @@ int main(int argc, char* argv[] )
   dogleg_getDefaultParameters(&dogleg_parameters);
   dogleg_parameters.debug       = debug;
   dogleg_parameters.debug_vnlog = debug_vnlog;
+
+  dogleg_parameters.JtJ_packed = packed;
+  dogleg_parameters.JtJ_upper  = upper;
 
   double p[Nstate];
 
@@ -371,15 +407,15 @@ int main(int argc, char* argv[] )
   double optimum;
   if(      solve_type == DOGLEG_SPARSE         )
     optimum = dogleg_optimize2(p, Nstate, Nmeasurements, Jnnz,
-                               &optimizerCallback, NULL,
+                               &optimizerCallback, &dogleg_parameters,
                                &dogleg_parameters, NULL);
   else if( solve_type == DOGLEG_DENSE         )
     optimum = dogleg_optimize_dense2(p, Nstate, Nmeasurements,
-                                     &optimizerCallback_dense, NULL,
+                                     &optimizerCallback_dense, &dogleg_parameters,
                                      &dogleg_parameters, NULL);
   else if( solve_type == DOGLEG_DENSE_PRODUCTS )
     optimum = dogleg_optimize_dense_products(p, Nstate,
-                                             &optimizerCallback_dense_products, NULL,
+                                             &optimizerCallback_dense_products, &dogleg_parameters,
                                              &dogleg_parameters, NULL);
 
   if(check)
