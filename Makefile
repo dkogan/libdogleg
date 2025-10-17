@@ -13,6 +13,9 @@ LIB_SOURCES += \
 BIN_SOURCES += \
   sample.c
 
+# I do not distribute ANY binaries
+DIST_BIN_EXCEPT := *
+
 DIST_INCLUDE += \
   dogleg.h
 
