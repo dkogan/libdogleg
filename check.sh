@@ -13,6 +13,8 @@ COLOR_RESET="\x1b[0m"
 ./sample --check dense           || anyfailed=1
 ./sample --check dense-products  || anyfailed=1
 
+./test-misc                      || anyfailed=1
+
 if [[ -n "$anyfailed" ]]; then
     echo -e $RED"Some tests failed"$COLOR_RESET
     exit 1;

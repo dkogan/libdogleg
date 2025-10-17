@@ -11,7 +11,8 @@ LIB_SOURCES += \
   dogleg.c
 
 BIN_SOURCES += \
-  sample.c
+  sample.c \
+  test-misc.c
 
 # I do not distribute ANY binaries
 DIST_BIN_EXCEPT := *
@@ -26,7 +27,7 @@ CFLAGS += -Wall -Wextra -I/usr/include/suitesparse
 
 sample.o: CFLAGS += -I.
 
-check: sample
+check: sample test-misc
 	./check.sh
 .PHONY: check
 

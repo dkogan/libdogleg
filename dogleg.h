@@ -116,6 +116,7 @@ typedef struct
 
 } dogleg_operatingPoint_t;
 
+#define DOGLEG_DEBUG_VNLOG_BIT 30
 // The newer APIs ( dogleg_...2() ) take a dogleg_parameters2_t argument for
 // their settings, while the older ones use a global set of parameters specified
 // with dogleg_set_...(). This global-parameters approach doesn't work if we
@@ -123,7 +124,15 @@ typedef struct
 typedef struct
 {
   int max_iterations;
-  int dogleg_debug;
+  union
+  {
+    int dogleg_debug;
+    struct
+    {
+      int  dummy       : DOGLEG_DEBUG_VNLOG_BIT;
+      bool debug_vnlog : 1; // in the same spot as dogleg_debug
+    };
+  };
 
   // it is cheap to reject a too-large trust region, so I start with something
   // "large". The solver will quickly move down to something reasonable. Only the
@@ -143,6 +152,10 @@ typedef struct
   double update_threshold;
   double trustregion_threshold;
 } dogleg_parameters2_t;
+_Static_assert(offsetof(dogleg_parameters2_t,trustregion0) == 2*sizeof(int),
+               "dogleg_parameters2_t structure must match that of libdogleg v0.16");
+// I also need to make sure that the "debug_vnlog" bit is DOGLEG_DEBUG_VNLOG. I
+// can't use a static-assert, so I do that in test-misc.c
 
 typedef enum {
   DOGLEG_DENSE          = 0,
@@ -212,7 +225,7 @@ void dogleg_setTrustregionUpdateParameters(double downFactor, double downThresho
 // if(debug == 0                 ): no diagnostic output
 // if(debug &  DOGLEG_DEBUG_VNLOG): output vnlog diagnostics to stdout
 // if(debug & ~DOGLEG_DEBUG_VNLOG): output human-oriented diagnostics to stderr
-#define DOGLEG_DEBUG_VNLOG   (1 << 30)
+#define DOGLEG_DEBUG_VNLOG     (1 << DOGLEG_DEBUG_VNLOG_BIT)
 void dogleg_setDebug(int debug);
 
 
