@@ -678,6 +678,7 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
   }
   else
   {
+    // DOGLEG_DENSE or DOGLEG_DENSE_PRODUCTS
     if( ctx->solve_type == DOGLEG_DENSE )
     {
       if(!point->have_J)
@@ -745,6 +746,27 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
         memcpy(ctx->factorization_dense,
                point->JtJ,
                size*sizeof(ctx->factorization_dense[0]));
+
+        if( ctx->lambda > 0.0 )
+        {
+          if(ctx->parameters->JtJ_packed)
+          {
+            int iJtJ=0;
+            for(int i1=0; i1<ctx->Nstate; i1++)
+            {
+              ctx->factorization_dense[iJtJ] += ctx->lambda;
+              iJtJ                           +=
+                ctx->parameters->JtJ_upper ?
+                (ctx->Nstate-i1) :
+                (i1+2);
+            }
+          }
+          else
+          {
+            for(int i1=0; i1<ctx->Nstate; i1++)
+              ctx->factorization_dense[i1 * (ctx->Nstate+1)] += ctx->lambda;
+          }
+        }
       }
       else
       {
@@ -754,17 +776,23 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
 
 
       int info;
-
-      if( ctx->solve_type == DOGLEG_DENSE ||
-          (ctx->parameters->JtJ_packed && ctx->parameters->JtJ_upper) )
+      if(ctx->solve_type == DOGLEG_DENSE)
       {
+        // DOGLEG_DENSE always uses packed&&upper
         dpptrf_(&(char){'L'}, &(int){ctx->Nstate}, ctx->factorization_dense,
                 &info);
       }
-      else if(ctx->parameters->JtJ_packed && !ctx->parameters->JtJ_upper)
+      else if(ctx->parameters->JtJ_packed)
       {
-        dpptrf_(&(char){'U'}, &(int){ctx->Nstate}, ctx->factorization_dense,
-                &info);
+          dpptrf_(ctx->parameters->JtJ_upper ?
+                    // this looks backwards, but isn't. I store matrices row-first,
+                    // while fortran stores then col-first. So when I say "upper",
+                    // fortran code sees it as "lower"
+                    &(char){'L'} :
+                    &(char){'U'},
+                  &(int){ctx->Nstate},
+                  ctx->factorization_dense,
+                  &info);
       }
       else
       {
@@ -779,13 +807,6 @@ bool dogleg_computeJtJfactorization(dogleg_operatingPoint_t* point, dogleg_solve
       // JtJ
       if( info == 0 )
         break;
-
-      if( ctx->solve_type == DOGLEG_DENSE_PRODUCTS )
-      {
-#warning "FINISH IMPLEMENTING DENSE_PRODUCTS\n"
-        SAY("UNINMPLEMENTED: ctx->lambda not used with DOGLEG_DENSE_PRODUCTS, and I don't want to modify the input JtJ");
-        exit(1);
-      }
 
       // singular JtJ. Raise lambda and go again
       if( ctx->lambda == 0.0) ctx->lambda = LAMBDA_INITIAL;
