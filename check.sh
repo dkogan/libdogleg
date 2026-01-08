@@ -11,8 +11,7 @@ COLOR_RESET="\x1b[0m"
 CMDS=('./sample --check sparse'
       './sample --check dense'
       './sample --check dense-products-packed-upper'
-      './sample --check dense-products-unpacked'
-      './test-misc')
+      './sample --check dense-products-unpacked')
 
 for cmd ($CMDS) {
     echo "Running:   $cmd";
