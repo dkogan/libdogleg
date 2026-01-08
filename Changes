@@ -1,4 +1,11 @@
-libdogleg (0.17) unstable; urgency=medium
+libdogleg (0.18)
+
+  * Tests pass on big-endian architectures (s390x)
+  * #include path tweak. libdogleg now builds and passes tests on macos
+
+ -- Dima Kogan <dkogan@debian.org>  Thu, 08 Jan 2026 14:48:05 -0800
+
+libdogleg (0.17)
 
   * Added dense-products solver
 
