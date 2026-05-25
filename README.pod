@@ -528,22 +528,18 @@ distros): simply
  apt install libdogleg-dev
 
 If you want mote recent packages than what your distro provides, builds are
-available in the mrcal APT repo. See:
-
- https://mrcal.secretsauce.net/install.html
+available in the L<mrcal APT repo|https://mrcal.secretsauce.net/install.html>.
 
 If you want to help get libdogleg into more distributions, send me an email. It
 can be built and used in many places that lack packages (Fedora, FreeBSD, macos,
 ...), and making a package shouldn't be a lot of work.
 
 To build from source, you need the dependencies in the Build-Depends section of
-the Debian package definition:
-
-  https://salsa.debian.org/science-team/libdogleg/-/blob/master/debian/control
+the L<Debian package definition|https://salsa.debian.org/science-team/libdogleg/-/blob/master/debian/control>
 
 When those are installed, simply run
 
-  make
+ make
 
 =head1 BUGS
 
