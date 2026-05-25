@@ -9,10 +9,10 @@ C<ceres> solver instead:
 
 L<http://ceres-solver.org/>
 
-C<libdogleg> is not deprecated, and I will fix bugs as they're reported. However
-C<ceres> is more feature-rich and I<much> more widely used. I consider C<ceres>
-to be a superset of C<libdogleg>, and if C<ceres> was available when I wrote
-C<libdogleg>, I would not have written it.
+C<libdogleg> is not deprecated. I use it heavily, and I do add features and fix
+bugs. However C<ceres> is more feature-rich and I<much> more widely used. I
+consider C<ceres> to be a superset of C<libdogleg>, and if C<ceres> was
+available when I wrote C<libdogleg>, I would not have written it.
 
 =head1 DESCRIPTION
 
