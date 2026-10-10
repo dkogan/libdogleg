@@ -1,7 +1,7 @@
 // -*- mode: C; c-basic-offset: 2 -*-
 // Copyright 2011 Oblong Industries
 //           2017 Dima Kogan <dima@secretsauce.net>
-// License: GNU LGPL <http://www.gnu.org/licenses>.
+// License: GNU LGPL, version 3 or later <http://www.gnu.org/licenses>.
 
 #pragma once
 
