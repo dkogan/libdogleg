@@ -1,3 +1,9 @@
+libdogleg (0.19)
+
+  * Minor documentation updates
+
+ -- Dima Kogan <dkogan@debian.org>  Sun, 01 Nov 2026 00:27:58 -0700
+
 libdogleg (0.18)
 
   * Tests pass on big-endian architectures (s390x)
